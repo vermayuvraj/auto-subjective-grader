@@ -376,6 +376,19 @@ def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/")
+def root_health() -> Dict[str, str]:
+    return {
+        "status": "ok",
+        "service": "auto-subjective-grader-api",
+    }
+
+
+@app.get("/healthz")
+def healthz() -> Dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.get("/api/team")
 def get_team() -> List[Dict[str, str]]:
     return TEAM_MEMBERS

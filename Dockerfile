@@ -29,9 +29,11 @@ RUN python -m pip install --upgrade "pip<24.1" setuptools wheel && \
 
 COPY backend_api ./backend_api
 COPY src ./src
+COPY start-backend.sh ./start-backend.sh
 
 RUN mkdir -p /app/persistent_data/api_runs
+RUN chmod +x /app/start-backend.sh
 
 EXPOSE 8001
 
-CMD ["python", "-m", "uvicorn", "backend_api.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]
+CMD ["/app/start-backend.sh"]
