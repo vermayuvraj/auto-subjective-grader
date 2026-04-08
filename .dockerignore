@@ -1,0 +1,15 @@
+.venv
+web/node_modules
+web/.next
+logs
+results
+data
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+.env
+web/.env.local
+web/.env.production

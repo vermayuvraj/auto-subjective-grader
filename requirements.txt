@@ -1,0 +1,27 @@
+# core
+numpy
+pillow
+opencv-python
+
+# pdf -> image
+pdf2image
+
+# OCR
+easyocr
+google-cloud-documentai
+azure-ai-documentintelligence
+pix2tex
+sympy
+antlr4-python3-runtime==4.11.*
+
+# (installed now for later steps, harmless for now)
+torch              # you may override with the correct CUDA wheel
+transformers
+sentence-transformers
+fpdf2
+language-tool-python
+streamlit
+fastapi
+uvicorn
+python-multipart
+google-generativeai
