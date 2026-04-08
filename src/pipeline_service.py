@@ -4,14 +4,6 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import diagram_extractor
-import evaluation_core
-import formula_pipeline
-import llm_evaluator
-import ocr_pipeline
-import report_generator
-
-
 ProgressCallback = Callable[[int, int, str], None]
 
 
@@ -52,6 +44,13 @@ def run_pipeline(
     azure_settings: Optional[Dict[str, str]] = None,
     progress_callback: Optional[ProgressCallback] = None,
 ) -> Tuple[List[Dict[str, Any]], str, str, float]:
+    import diagram_extractor
+    import evaluation_core
+    import formula_pipeline
+    import llm_evaluator
+    import ocr_pipeline
+    import report_generator
+
     started_at = time.perf_counter()
     azure_settings = azure_settings or {}
 

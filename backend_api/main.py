@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import shutil
 import sys
@@ -5,7 +7,7 @@ import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,10 +18,11 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.append(str(SRC_ROOT))
 
-from pipeline_service import PipelineServiceConfig, run_pipeline
-
 from backend_api.content import RESOURCE_ITEMS, TEAM_MEMBERS
 from backend_api.settings import load_settings
+
+if TYPE_CHECKING:
+    from pipeline_service import PipelineServiceConfig
 
 
 SETTINGS = load_settings(PROJECT_ROOT)
@@ -45,6 +48,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _load_pipeline_service():
+    from pipeline_service import PipelineServiceConfig, run_pipeline
+
+    return PipelineServiceConfig, run_pipeline
 
 
 def _save_upload_file(upload: UploadFile, target_path: Path) -> Path:
@@ -158,6 +167,7 @@ def _prepare_run_inputs(
     azure_endpoint: Optional[str],
     azure_key: Optional[str],
 ) -> Tuple[str, Dict[str, Any], str, List[str], PipelineServiceConfig, Dict[str, str]]:
+    PipelineServiceConfig, _ = _load_pipeline_service()
     engine, ocr_backend = _validate_inputs(engine, ocr_backend, azure_endpoint, azure_key)
 
     try:
@@ -280,6 +290,7 @@ def _execute_job(
         _persist_job_meta(run_id, meta)
 
         try:
+            _, run_pipeline = _load_pipeline_service()
             results, eval_dir, report_dir, elapsed = run_pipeline(
                 ideal_pdf_path=ideal_pdf_path,
                 student_pdf_paths=student_paths,
@@ -511,6 +522,7 @@ def evaluate_sync(
     _append_event(rows_meta, "Synchronous evaluation started.")
     _persist_job_meta(run_id, rows_meta)
 
+    _, run_pipeline = _load_pipeline_service()
     results, eval_dir, report_dir, elapsed = run_pipeline(
         ideal_pdf_path=ideal_pdf_path,
         student_pdf_paths=student_paths,
