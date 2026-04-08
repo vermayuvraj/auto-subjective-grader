@@ -21,7 +21,7 @@ sentence-transformers
 fpdf2
 language-tool-python
 streamlit
-fastapi
-uvicorn
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
 python-multipart
 google-generativeai
