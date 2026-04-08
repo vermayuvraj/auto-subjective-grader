@@ -1,0 +1,21 @@
+# Backend-only requirements for the FastAPI deployment image.
+# This intentionally excludes Streamlit and other local-only UI packages
+# to keep Docker builds predictable on Azure.
+
+numpy==2.1.2
+pillow==11.3.0
+opencv-python-headless==4.12.0.88
+pdf2image==1.17.0
+
+easyocr==1.7.2
+azure-ai-documentintelligence==1.0.2
+pix2tex==0.1.4
+sympy==1.14.0
+antlr4-python3-runtime==4.11.1
+sentence-transformers==5.1.2
+
+fpdf2==2.8.5
+fastapi==0.135.3
+uvicorn[standard]==0.42.0
+python-multipart==0.0.22
+google-generativeai==0.8.5
