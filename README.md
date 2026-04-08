@@ -96,15 +96,16 @@ This allows mathematically equivalent expressions such as `(x+1)^2` and `x^2 + 2
 Recommended public deployment:
 
 - `web/` on **Vercel**
-- `backend_api/` + `src/` on **DigitalOcean**
+- `backend_api/` + `src/` on **Azure App Service** or **DigitalOcean**
 
 This split is preferred because:
 
 - Vercel is ideal for the professional Next.js frontend
 - the backend performs OCR, PDF conversion, formula parsing, and report generation, which are better suited to a persistent server/container
 
-Deployment guide:
+Deployment guides:
 
+- [DEPLOY_VERCEL_AZURE.md](C:/Users/Yuvraj%20Verma/Desktop/BTP%20P1.1/auto_subjective_grader/DEPLOY_VERCEL_AZURE.md)
 - [DEPLOY_VERCEL_DIGITALOCEAN.md](C:/Users/Yuvraj%20Verma/Desktop/BTP%20P1.1/auto_subjective_grader/DEPLOY_VERCEL_DIGITALOCEAN.md)
 
 ## Current Assumptions
