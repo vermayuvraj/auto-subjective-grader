@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { SectionShell } from "../../components/section-shell";
-import { API_BASE_URL } from "../../lib/api";
+import { BROWSER_API_BASE_URL } from "../../lib/api";
 
 type SummaryRow = {
   rank: number;
@@ -279,8 +279,8 @@ export default function EvaluatePage() {
     async function loadHistory() {
       try {
         const [historyResponse, runtimeResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/jobs`, { cache: "no-store" }),
-          fetch(`${API_BASE_URL}/api/runtime-config`, { cache: "no-store" }),
+          fetch(`${BROWSER_API_BASE_URL}/jobs`, { cache: "no-store" }),
+          fetch(`${BROWSER_API_BASE_URL}/runtime-config`, { cache: "no-store" }),
         ]);
 
         if (!historyResponse.ok) {
@@ -318,8 +318,8 @@ export default function EvaluatePage() {
       async function refreshRun() {
         try {
           const [runResponse, jobsResponse] = await Promise.all([
-            fetch(`${API_BASE_URL}/api/jobs/${activeRunId}`, { cache: "no-store" }),
-            fetch(`${API_BASE_URL}/api/jobs`, { cache: "no-store" }),
+            fetch(`${BROWSER_API_BASE_URL}/jobs/${activeRunId}`, { cache: "no-store" }),
+            fetch(`${BROWSER_API_BASE_URL}/jobs`, { cache: "no-store" }),
           ]);
 
           if (!runResponse.ok) {
@@ -351,7 +351,7 @@ export default function EvaluatePage() {
   async function refreshHistory() {
     setIsHistoryLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/jobs`, { cache: "no-store" });
+      const response = await fetch(`${BROWSER_API_BASE_URL}/jobs`, { cache: "no-store" });
       if (!response.ok) {
         throw new Error("Unable to refresh recent runs.");
       }
@@ -372,7 +372,7 @@ export default function EvaluatePage() {
     setError("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/runs/${runId}`, { cache: "no-store" });
+      const response = await fetch(`${BROWSER_API_BASE_URL}/runs/${runId}`, { cache: "no-store" });
       const data = (await response.json()) as RunMeta | { detail?: string };
       if (!response.ok) {
         throw new Error("detail" in data && data.detail ? data.detail : "Unable to load the selected run.");
@@ -411,7 +411,7 @@ export default function EvaluatePage() {
     try {
       setIsSubmitting(true);
       setCurrentRun(null);
-      const response = await fetch(`${API_BASE_URL}/api/jobs`, {
+      const response = await fetch(`${BROWSER_API_BASE_URL}/jobs`, {
         method: "POST",
         body: formData,
       });
@@ -711,7 +711,7 @@ export default function EvaluatePage() {
                         {report ? (
                           <a
                             className="link-chip"
-                            href={`${API_BASE_URL}${report.download_url}`}
+                            href={`${BROWSER_API_BASE_URL}${report.download_url.replace(/^\/api/, "")}`}
                             target="_blank"
                             rel="noreferrer"
                           >
