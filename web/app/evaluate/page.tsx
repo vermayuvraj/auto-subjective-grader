@@ -330,20 +330,6 @@ export default function EvaluatePage() {
   }, []);
 
   useEffect(() => {
-    if (!isHostedDeployment || !runtimeConfig) {
-      return;
-    }
-
-    if (runtimeConfig.azure_configured && ocrBackend !== "azure") {
-      setOcrBackend("azure");
-    }
-
-    if (runtimeConfig.gemini_configured && engine !== "LLM") {
-      setEngine("LLM");
-    }
-  }, [engine, isHostedDeployment, ocrBackend, runtimeConfig]);
-
-  useEffect(() => {
     if (!currentRun || !["queued", "running"].includes(currentRun.status) || hostedUsesSynchronousRuns) {
       return undefined;
     }
@@ -432,10 +418,8 @@ export default function EvaluatePage() {
       return;
     }
 
-    const effectiveEngine =
-      isHostedDeployment && runtimeConfig?.gemini_configured ? "LLM" : engine;
-    const effectiveOcrBackend =
-      isHostedDeployment && runtimeConfig?.azure_configured ? "azure" : ocrBackend;
+    const effectiveEngine = engine;
+    const effectiveOcrBackend = ocrBackend;
 
     const formData = new FormData();
     formData.append("ideal_pdf", idealPdf);
@@ -584,7 +568,6 @@ export default function EvaluatePage() {
                   className="select-control"
                   value={engine}
                   onChange={(e) => setEngine(e.target.value)}
-                  disabled={isHostedDeployment}
                 >
                   <option value="SBERT">SBERT (fast, local)</option>
                   <option value="LLM">Gemini 2.5 Flash (LLM API)</option>
@@ -597,7 +580,6 @@ export default function EvaluatePage() {
                   className="select-control"
                   value={ocrBackend}
                   onChange={(e) => setOcrBackend(e.target.value)}
-                  disabled={isHostedDeployment}
                 >
                   <option value="easyocr">Current / printed sheets (EasyOCR)</option>
                   <option value="azure">Handwritten sheets (Azure Document Intelligence)</option>
@@ -606,10 +588,9 @@ export default function EvaluatePage() {
 
               {isHostedDeployment ? (
                 <div className="status-card">
-                  <strong>Hosted mode is optimized for deployment stability.</strong>
-                  The deployed website uses the server-managed runtime profile and runs
-                  evaluations synchronously for better cloud reliability. Gemini and handwritten
-                  OCR activate automatically when the backend is configured for them.
+                  <strong>Hosted mode keeps the production backend path stable.</strong>
+                  The deployed website still runs evaluation through the production backend, but
+                  you can now switch OCR and evaluation engines directly from this interface.
                 </div>
               ) : null}
 
@@ -618,6 +599,14 @@ export default function EvaluatePage() {
                   <strong>Server-managed handwritten OCR is active.</strong>
                   The deployed backend already has the handwritten OCR credentials it needs, so
                   handwritten evaluation can run without exposing secrets in the web UI.
+                </div>
+              ) : null}
+
+              {isHostedDeployment && !requiresAzure ? (
+                <div className="status-card">
+                  <strong>Printed OCR is enabled on the hosted backend.</strong>
+                  EasyOCR and SBERT remain available in production, so you can test the same
+                  printed-sheet flow from the web interface.
                 </div>
               ) : null}
 
