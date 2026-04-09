@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 function buildTargetUrl(pathSegments: string[], search: string): string {
   const joinedPath = pathSegments.join("/");
   const baseUrl = getServerApiBaseUrl();
-  return `${baseUrl}/${joinedPath}${search}`;
+  const apiPath = joinedPath ? `/api/${joinedPath}` : "/api";
+  return `${baseUrl}${apiPath}${search}`;
 }
 
 async function proxyRequest(

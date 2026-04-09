@@ -1,13 +1,14 @@
+const CLOUD_RUN_API_BASE_URL =
+  "https://auto-subjective-grader-api-217944702445.asia-south1.run.app";
+
 const SERVER_API_BASE_URL =
-  process.env.BACKEND_API_BASE_URL ||
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "http://127.0.0.1:8001";
+  process.env.NODE_ENV === "development"
+    ? process.env.BACKEND_API_BASE_URL ||
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      "http://127.0.0.1:8001"
+    : CLOUD_RUN_API_BASE_URL;
 
-const PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, "");
-
-export const BROWSER_API_BASE_URL = PUBLIC_API_BASE_URL
-  ? `${PUBLIC_API_BASE_URL}/api`
-  : "/api";
+export const BROWSER_API_BASE_URL = "/api";
 
 export function getServerApiBaseUrl(): string {
   return SERVER_API_BASE_URL.replace(/\/+$/, "");
