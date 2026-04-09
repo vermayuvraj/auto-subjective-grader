@@ -243,6 +243,16 @@ function getWorkflowBlocks(run: RunMeta | null): Array<WorkflowBlock & { state: 
   });
 }
 
+async function readApiPayload<T>(response: Response): Promise<T | { detail?: string }> {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return (await response.json()) as T | { detail?: string };
+  }
+
+  const text = await response.text();
+  return { detail: text || `Request failed with status ${response.status}.` };
+}
+
 export default function EvaluatePage() {
   const [idealPdf, setIdealPdf] = useState<File | null>(null);
   const [rubricJson, setRubricJson] = useState<File | null>(null);
@@ -297,11 +307,11 @@ export default function EvaluatePage() {
           throw new Error("Unable to load recent runs.");
         }
 
-        const data = (await historyResponse.json()) as RunSummary[];
+        const data = (await readApiPayload<RunSummary[]>(historyResponse)) as RunSummary[];
         setRunHistory(data);
 
         if (runtimeResponse.ok) {
-          const runtimeData = (await runtimeResponse.json()) as RuntimeConfig;
+          const runtimeData = (await readApiPayload<RuntimeConfig>(runtimeResponse)) as RuntimeConfig;
           setRuntimeConfig(runtimeData);
         }
       } catch (historyError) {
@@ -350,11 +360,11 @@ export default function EvaluatePage() {
             throw new Error("Unable to refresh the active run.");
           }
 
-          const runData = (await runResponse.json()) as RunMeta;
+          const runData = (await readApiPayload<RunMeta>(runResponse)) as RunMeta;
           setCurrentRun(runData);
 
           if (jobsResponse.ok) {
-            const historyData = (await jobsResponse.json()) as RunSummary[];
+            const historyData = (await readApiPayload<RunSummary[]>(jobsResponse)) as RunSummary[];
             setRunHistory(historyData);
           }
         } catch (pollError) {
@@ -379,7 +389,7 @@ export default function EvaluatePage() {
       if (!response.ok) {
         throw new Error("Unable to refresh recent runs.");
       }
-      const data = (await response.json()) as RunSummary[];
+      const data = (await readApiPayload<RunSummary[]>(response)) as RunSummary[];
       setRunHistory(data);
     } catch (historyError) {
       setError(
@@ -397,7 +407,7 @@ export default function EvaluatePage() {
 
     try {
       const response = await fetch(`${BROWSER_API_BASE_URL}/runs/${runId}`, { cache: "no-store" });
-      const data = (await response.json()) as RunMeta | { detail?: string };
+      const data = await readApiPayload<RunMeta>(response);
       if (!response.ok) {
         throw new Error("detail" in data && data.detail ? data.detail : "Unable to load the selected run.");
       }
@@ -421,12 +431,17 @@ export default function EvaluatePage() {
       return;
     }
 
+    const effectiveEngine =
+      isHostedDeployment && runtimeConfig?.gemini_configured ? "LLM" : engine;
+    const effectiveOcrBackend =
+      isHostedDeployment && runtimeConfig?.azure_configured ? "azure" : ocrBackend;
+
     const formData = new FormData();
     formData.append("ideal_pdf", idealPdf);
     formData.append("rubric_json", rubricJson);
     studentPdfs.forEach((file) => formData.append("student_pdfs", file));
-    formData.append("engine", engine);
-    formData.append("ocr_backend", ocrBackend);
+    formData.append("engine", effectiveEngine);
+    formData.append("ocr_backend", effectiveOcrBackend);
     if (needsManualAzureSecrets) {
       formData.append("azure_endpoint", azureEndpoint);
       formData.append("azure_key", azureKey);
@@ -440,7 +455,7 @@ export default function EvaluatePage() {
         body: formData,
       });
 
-      const data = (await response.json()) as RunMeta | { detail?: string };
+      const data = await readApiPayload<RunMeta>(response);
       if (!response.ok) {
         throw new Error("detail" in data && data.detail ? data.detail : "Evaluation failed.");
       }

@@ -18,7 +18,6 @@ from io import BytesIO
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import easyocr
 import numpy as np
 from pdf2image import convert_from_path
 from PIL import Image
@@ -79,11 +78,13 @@ def pdf_to_images(pdf_path: str, config: OCRConfig):
     return images
 
 
-def build_easyocr_reader(config: OCRConfig) -> easyocr.Reader:
+def build_easyocr_reader(config: OCRConfig) -> Any:
+    import easyocr
+
     return easyocr.Reader(config.languages, gpu=config.use_gpu)
 
 
-def run_easyocr_on_page(pil_img, reader: easyocr.Reader) -> List[Dict[str, Any]]:
+def run_easyocr_on_page(pil_img, reader: Any) -> List[Dict[str, Any]]:
     img = np.array(pil_img)
     result = reader.readtext(img, detail=1, paragraph=False)
 
@@ -372,7 +373,7 @@ def ocr_pdf_with_azure_document_intelligence(pdf_path: str, config: OCRConfig) -
     print(f"[OCR] Completed with Azure Document Intelligence: {pdf_path}")
 
 
-def ocr_pdf(pdf_path: str, config: OCRConfig, reader: Optional[easyocr.Reader]):
+def ocr_pdf(pdf_path: str, config: OCRConfig, reader: Optional[Any]):
     cleanup_ocr_outputs(pdf_path, config.output_root)
 
     if config.backend == "documentai":

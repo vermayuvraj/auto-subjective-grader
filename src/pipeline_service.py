@@ -2,7 +2,15 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    import diagram_extractor
+    import evaluation_core
+    import formula_pipeline
+    import llm_evaluator
+    import ocr_pipeline
+    import report_generator
 
 ProgressCallback = Callable[[int, int, str], None]
 
@@ -45,9 +53,6 @@ def run_pipeline(
     progress_callback: Optional[ProgressCallback] = None,
 ) -> Tuple[List[Dict[str, Any]], str, str, float]:
     import diagram_extractor
-    import evaluation_core
-    import formula_pipeline
-    import llm_evaluator
     import ocr_pipeline
     import report_generator
 
@@ -75,20 +80,22 @@ def run_pipeline(
         min_area_ratio=0.003,
         min_center_y_ratio=0.45,
     )
-    formula_cfg = formula_pipeline.FormulaConfig(
-        dpi=config.dpi,
-        poppler_path=config.poppler_path,
-        ocr_root=config.ocr_root,
-        output_root=config.formula_root,
-        crop_root=config.formula_crop_root,
-    )
-
     ocr_pipeline.ensure_dir(config.ocr_root)
     os.makedirs(config.diagram_root, exist_ok=True)
-    os.makedirs(config.formula_root, exist_ok=True)
-    os.makedirs(config.formula_crop_root, exist_ok=True)
 
     if engine == "SBERT":
+        import evaluation_core
+        import formula_pipeline
+
+        formula_cfg = formula_pipeline.FormulaConfig(
+            dpi=config.dpi,
+            poppler_path=config.poppler_path,
+            ocr_root=config.ocr_root,
+            output_root=config.formula_root,
+            crop_root=config.formula_crop_root,
+        )
+        os.makedirs(config.formula_root, exist_ok=True)
+        os.makedirs(config.formula_crop_root, exist_ok=True)
         eval_cfg = evaluation_core.EvalConfig(
             ocr_root=config.ocr_root,
             diagram_root=config.diagram_root,
@@ -103,6 +110,8 @@ def run_pipeline(
         eval_dir = config.eval_sbert_root
         report_dir = config.report_sbert_root
     else:
+        import llm_evaluator
+
         llm_cfg = llm_evaluator.LlmEvalConfig(
             ocr_root=config.ocr_root,
             diagram_root=config.diagram_root,
