@@ -571,16 +571,17 @@ export default function EvaluatePage() {
 
               {isHostedDeployment ? (
                 <div className="status-card">
-                  <strong>Hosted mode is optimized for production stability.</strong>
-                  The deployed website uses Azure OCR and Gemini evaluation by default. Use the
-                  local Streamlit workspace for the full SBERT + EasyOCR research pipeline.
+                  <strong>Hosted mode is optimized for deployment stability.</strong>
+                  The deployed website uses the server-managed handwritten OCR and Gemini
+                  evaluation profile by default. Use the local Streamlit workspace for the full
+                  SBERT + EasyOCR research pipeline.
                 </div>
               ) : null}
 
               {requiresAzure && runtimeConfig?.azure_configured ? (
                 <div className="status-card">
-                  <strong>Server-managed Azure OCR is active.</strong>
-                  The deployed backend already has Azure Document Intelligence credentials, so
+                  <strong>Server-managed handwritten OCR is active.</strong>
+                  The deployed backend already has the handwritten OCR credentials it needs, so
                   handwritten evaluation can run without exposing secrets in the web UI.
                 </div>
               ) : null}

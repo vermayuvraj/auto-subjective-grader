@@ -96,17 +96,17 @@ This allows mathematically equivalent expressions such as `(x+1)^2` and `x^2 + 2
 Recommended public deployment:
 
 - `web/` on **Vercel**
-- `backend_api/` + `src/` on **Azure App Service** or **DigitalOcean**
+- `backend_api/` + `src/` on **Render**
 
 This split is preferred because:
 
 - Vercel is ideal for the professional Next.js frontend
-- the backend performs OCR, PDF conversion, formula parsing, and report generation, which are better suited to a persistent server/container
+- Render gives the backend a direct HTTPS URL, which avoids the Vercel upload-proxy limits
+- handwritten OCR can still use Azure Document Intelligence only as an OCR provider, not as the hosting platform
 
-Deployment guides:
+Deployment guide:
 
-- [DEPLOY_VERCEL_AZURE.md](C:/Users/Yuvraj%20Verma/Desktop/BTP%20P1.1/auto_subjective_grader/DEPLOY_VERCEL_AZURE.md)
-- [DEPLOY_VERCEL_DIGITALOCEAN.md](C:/Users/Yuvraj%20Verma/Desktop/BTP%20P1.1/auto_subjective_grader/DEPLOY_VERCEL_DIGITALOCEAN.md)
+- [DEPLOY_VERCEL_RENDER.md](C:/Users/Yuvraj%20Verma/Desktop/BTP%20P1.1/auto_subjective_grader/DEPLOY_VERCEL_RENDER.md)
 
 ## Current Assumptions
 
