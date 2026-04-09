@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import threading
@@ -158,6 +159,24 @@ def _validate_inputs(
     return engine, ocr_backend
 
 
+def _coerce_hosted_ocr_backend(
+    ocr_backend: str,
+    azure_endpoint: Optional[str],
+    azure_key: Optional[str],
+) -> Tuple[str, Optional[str]]:
+    is_cloud_run = bool(os.getenv("K_SERVICE"))
+    has_server_managed_azure = bool(SETTINGS.azure_endpoint and SETTINGS.azure_key)
+    has_request_azure = bool(azure_endpoint and azure_key)
+
+    if is_cloud_run and ocr_backend == "easyocr" and (has_server_managed_azure or has_request_azure):
+        return (
+            "azure",
+            "EasyOCR was requested on the hosted backend, so the run was switched to Azure Document Intelligence for production stability.",
+        )
+
+    return ocr_backend, None
+
+
 def _prepare_run_inputs(
     ideal_pdf: UploadFile,
     rubric_json: UploadFile,
@@ -166,9 +185,22 @@ def _prepare_run_inputs(
     ocr_backend: str,
     azure_endpoint: Optional[str],
     azure_key: Optional[str],
-) -> Tuple[str, Dict[str, Any], str, List[str], PipelineServiceConfig, Dict[str, str]]:
+) -> Tuple[
+    str,
+    Dict[str, Any],
+    str,
+    List[str],
+    PipelineServiceConfig,
+    Dict[str, str],
+    Dict[str, Any],
+]:
     PipelineServiceConfig, _ = _load_pipeline_service()
     engine, ocr_backend = _validate_inputs(engine, ocr_backend, azure_endpoint, azure_key)
+    ocr_backend, hosted_override_message = _coerce_hosted_ocr_backend(
+        ocr_backend,
+        azure_endpoint,
+        azure_key,
+    )
 
     try:
         rubric_dict = json.load(rubric_json.file)
@@ -207,7 +239,19 @@ def _prepare_run_inputs(
         "endpoint": azure_endpoint or SETTINGS.azure_endpoint or "",
         "key": azure_key or SETTINGS.azure_key or "",
     }
-    return run_id, rubric_dict, str(ideal_pdf_path), student_paths, service_config, azure_settings
+    return (
+        run_id,
+        rubric_dict,
+        str(ideal_pdf_path),
+        student_paths,
+        service_config,
+        azure_settings,
+        {
+            "engine": engine,
+            "ocr_backend": ocr_backend,
+            "hosted_override_message": hosted_override_message,
+        },
+    )
 
 
 def _build_reports(run_id: str, rows: List[Dict[str, Any]]) -> List[Dict[str, str]]:
@@ -471,6 +515,7 @@ def create_job(
         student_paths,
         service_config,
         azure_settings,
+        execution_settings,
     ) = _prepare_run_inputs(
         ideal_pdf=ideal_pdf,
         rubric_json=rubric_json,
@@ -481,7 +526,16 @@ def create_job(
         azure_key=azure_key,
     )
 
-    meta = _create_initial_meta(run_id, engine.upper(), ocr_backend.lower(), len(student_paths))
+    meta = _create_initial_meta(
+        run_id,
+        execution_settings["engine"],
+        execution_settings["ocr_backend"],
+        len(student_paths),
+    )
+    if execution_settings["hosted_override_message"]:
+        meta["message"] = execution_settings["hosted_override_message"]
+        _append_event(meta, execution_settings["hosted_override_message"])
+        _persist_job_meta(run_id, meta)
 
     worker = threading.Thread(
         target=_execute_job,
@@ -491,8 +545,8 @@ def create_job(
             ideal_pdf_path,
             student_paths,
             service_config,
-            engine.upper(),
-            ocr_backend.lower(),
+            execution_settings["engine"],
+            execution_settings["ocr_backend"],
             azure_settings,
         ),
         daemon=True,
@@ -518,6 +572,7 @@ def evaluate_sync(
         student_paths,
         service_config,
         azure_settings,
+        execution_settings,
     ) = _prepare_run_inputs(
         ideal_pdf=ideal_pdf,
         rubric_json=rubric_json,
@@ -528,11 +583,19 @@ def evaluate_sync(
         azure_key=azure_key,
     )
 
-    rows_meta = _create_initial_meta(run_id, engine.upper(), ocr_backend.lower(), len(student_paths))
+    rows_meta = _create_initial_meta(
+        run_id,
+        execution_settings["engine"],
+        execution_settings["ocr_backend"],
+        len(student_paths),
+    )
     rows_meta["status"] = "running"
     rows_meta["started_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
     rows_meta["message"] = "Synchronous evaluation started."
     _append_event(rows_meta, "Synchronous evaluation started.")
+    if execution_settings["hosted_override_message"]:
+        rows_meta["message"] = execution_settings["hosted_override_message"]
+        _append_event(rows_meta, execution_settings["hosted_override_message"])
     _persist_job_meta(run_id, rows_meta)
 
     _, run_pipeline = _load_pipeline_service()
@@ -540,8 +603,8 @@ def evaluate_sync(
         ideal_pdf_path=ideal_pdf_path,
         student_pdf_paths=student_paths,
         rubric_dict=rubric_dict,
-        engine=engine.upper(),
-        ocr_backend=ocr_backend.lower(),
+        engine=execution_settings["engine"],
+        ocr_backend=execution_settings["ocr_backend"],
         config=service_config,
         azure_settings=azure_settings,
         progress_callback=_job_progress_callback(run_id),
