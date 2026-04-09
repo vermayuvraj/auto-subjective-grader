@@ -4,12 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 
 
-DEFAULT_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:3100",
-    "http://127.0.0.1:3100",
-]
+DEFAULT_ALLOWED_ORIGINS = ["*"]
 
 
 def _read_bool(name: str, default: bool) -> bool:
