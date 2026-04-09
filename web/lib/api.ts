@@ -8,7 +8,14 @@ const SERVER_API_BASE_URL =
       "http://127.0.0.1:8001"
     : CLOUD_RUN_API_BASE_URL;
 
-export const BROWSER_API_BASE_URL = "/api";
+const PUBLIC_API_BASE_URL =
+  process.env.NODE_ENV === "development"
+    ? process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, "")
+    : CLOUD_RUN_API_BASE_URL;
+
+export const BROWSER_API_BASE_URL = PUBLIC_API_BASE_URL
+  ? `${PUBLIC_API_BASE_URL}/api`
+  : "/api";
 
 export function getServerApiBaseUrl(): string {
   return SERVER_API_BASE_URL.replace(/\/+$/, "");
