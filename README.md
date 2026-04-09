@@ -96,17 +96,18 @@ This allows mathematically equivalent expressions such as `(x+1)^2` and `x^2 + 2
 Recommended public deployment:
 
 - `web/` on **Vercel**
-- `backend_api/` + `src/` on **Koyeb**
+- `backend_api/` + `src/` on **Hugging Face Docker Spaces**
 
 This split is preferred because:
 
 - Vercel is ideal for the professional Next.js frontend
-- Koyeb gives the backend a direct HTTPS URL, which avoids the Vercel upload-proxy limits
+- Hugging Face Docker Spaces give the backend a direct HTTPS URL without relying on Azure hosting
+- Spaces support arbitrary Dockerfiles, including FastAPI backends
 - handwritten OCR can still use Azure Document Intelligence only as an OCR provider, not as the hosting platform
 
 Deployment guide:
 
-- [DEPLOY_VERCEL_KOYEB.md](C:/Users/Yuvraj%20Verma/Desktop/BTP%20P1.1/auto_subjective_grader/DEPLOY_VERCEL_KOYEB.md)
+- [DEPLOY_VERCEL_HF_SPACES.md](C:/Users/Yuvraj%20Verma/Desktop/BTP%20P1.1/auto_subjective_grader/DEPLOY_VERCEL_HF_SPACES.md)
 
 ## Current Assumptions
 
