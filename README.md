@@ -96,18 +96,18 @@ This allows mathematically equivalent expressions such as `(x+1)^2` and `x^2 + 2
 Recommended public deployment:
 
 - `web/` on **Vercel**
-- `backend_api/` + `src/` on **Hugging Face Docker Spaces**
+- `backend_api/` + `src/` on **Google Cloud Run**
 
 This split is preferred because:
 
 - Vercel is ideal for the professional Next.js frontend
-- Hugging Face Docker Spaces give the backend a direct HTTPS URL without relying on Azure hosting
-- Spaces support arbitrary Dockerfiles, including FastAPI backends
+- Cloud Run gives the backend a direct HTTPS URL and handles container deployment cleanly
+- Cloud Run supports larger request bodies and longer request timeouts than the Vercel upload-proxy path
 - handwritten OCR can still use Azure Document Intelligence only as an OCR provider, not as the hosting platform
 
 Deployment guide:
 
-- [DEPLOY_VERCEL_HF_SPACES.md](C:/Users/Yuvraj%20Verma/Desktop/BTP%20P1.1/auto_subjective_grader/DEPLOY_VERCEL_HF_SPACES.md)
+- [DEPLOY_VERCEL_CLOUD_RUN.md](C:/Users/Yuvraj%20Verma/Desktop/BTP%20P1.1/auto_subjective_grader/DEPLOY_VERCEL_CLOUD_RUN.md)
 
 ## Current Assumptions
 

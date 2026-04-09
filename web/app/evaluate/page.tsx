@@ -268,6 +268,7 @@ export default function EvaluatePage() {
   const [runHistory, setRunHistory] = useState<RunSummary[]>([]);
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [isHostedDeployment, setIsHostedDeployment] = useState(false);
+  const hostedUsesSynchronousRuns = isHostedDeployment;
 
   const requiresAzure = useMemo(() => ocrBackend === "azure", [ocrBackend]);
   const needsManualAzureSecrets = requiresAzure && !runtimeConfig?.azure_configured;
@@ -343,7 +344,7 @@ export default function EvaluatePage() {
   }, [engine, isHostedDeployment, ocrBackend, runtimeConfig]);
 
   useEffect(() => {
-    if (!currentRun || !["queued", "running"].includes(currentRun.status)) {
+    if (!currentRun || !["queued", "running"].includes(currentRun.status) || hostedUsesSynchronousRuns) {
       return undefined;
     }
 
@@ -380,7 +381,7 @@ export default function EvaluatePage() {
     }, 2200);
 
     return () => window.clearTimeout(timer);
-  }, [currentRun]);
+  }, [currentRun, hostedUsesSynchronousRuns]);
 
   async function refreshHistory() {
     setIsHistoryLoading(true);
@@ -449,8 +450,42 @@ export default function EvaluatePage() {
 
     try {
       setIsSubmitting(true);
-      setCurrentRun(null);
-      const response = await fetch(`${BROWSER_API_BASE_URL}/jobs`, {
+
+      const endpoint = hostedUsesSynchronousRuns ? "/evaluate" : "/jobs";
+
+      if (hostedUsesSynchronousRuns) {
+        const now = new Date().toISOString();
+        setCurrentRun({
+          run_id: "live-run",
+          status: "running",
+          engine: effectiveEngine,
+          ocr_backend: effectiveOcrBackend,
+          student_count: studentPdfs.length,
+          created_at: now,
+          started_at: now,
+          completed_at: null,
+          current_step: 0,
+          total_steps: 0,
+          progress_percent: 0,
+          message: "Cloud evaluation is running synchronously. Please wait for the final result.",
+          events: [
+            {
+              timestamp: now,
+              message: "Synchronous cloud evaluation started.",
+            },
+          ],
+          elapsed_seconds: null,
+          eval_dir: null,
+          report_dir: null,
+          summary_rows: [],
+          reports: [],
+          error: null,
+        });
+      } else {
+        setCurrentRun(null);
+      }
+
+      const response = await fetch(`${BROWSER_API_BASE_URL}${endpoint}`, {
         method: "POST",
         body: formData,
       });
@@ -572,9 +607,9 @@ export default function EvaluatePage() {
               {isHostedDeployment ? (
                 <div className="status-card">
                   <strong>Hosted mode is optimized for deployment stability.</strong>
-                  The deployed website uses the server-managed handwritten OCR and Gemini
-                  evaluation profile by default. Use the local Streamlit workspace for the full
-                  SBERT + EasyOCR research pipeline.
+                  The deployed website uses the server-managed runtime profile and runs
+                  evaluations synchronously for better cloud reliability. Gemini and handwritten
+                  OCR activate automatically when the backend is configured for them.
                 </div>
               ) : null}
 
