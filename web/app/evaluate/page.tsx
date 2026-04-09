@@ -257,6 +257,7 @@ export default function EvaluatePage() {
   const [currentRun, setCurrentRun] = useState<RunMeta | null>(null);
   const [runHistory, setRunHistory] = useState<RunSummary[]>([]);
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
+  const [isHostedDeployment, setIsHostedDeployment] = useState(false);
 
   const requiresAzure = useMemo(() => ocrBackend === "azure", [ocrBackend]);
   const needsManualAzureSecrets = requiresAzure && !runtimeConfig?.azure_configured;
@@ -274,6 +275,15 @@ export default function EvaluatePage() {
       .filter((run) => typeof run.top_percentage === "number")
       .sort((left, right) => (right.top_percentage ?? 0) - (left.top_percentage ?? 0))[0] ?? null;
   }, [runHistory]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const hostname = window.location.hostname.toLowerCase();
+    setIsHostedDeployment(!["localhost", "127.0.0.1"].includes(hostname));
+  }, []);
 
   useEffect(() => {
     async function loadHistory() {
@@ -307,6 +317,20 @@ export default function EvaluatePage() {
 
     void loadHistory();
   }, []);
+
+  useEffect(() => {
+    if (!isHostedDeployment || !runtimeConfig) {
+      return;
+    }
+
+    if (runtimeConfig.azure_configured && ocrBackend !== "azure") {
+      setOcrBackend("azure");
+    }
+
+    if (runtimeConfig.gemini_configured && engine !== "LLM") {
+      setEngine("LLM");
+    }
+  }, [engine, isHostedDeployment, ocrBackend, runtimeConfig]);
 
   useEffect(() => {
     if (!currentRun || !["queued", "running"].includes(currentRun.status)) {
@@ -506,7 +530,12 @@ export default function EvaluatePage() {
 
               <label>
                 <span className="field-label">Evaluation Engine</span>
-                <select className="select-control" value={engine} onChange={(e) => setEngine(e.target.value)}>
+                <select
+                  className="select-control"
+                  value={engine}
+                  onChange={(e) => setEngine(e.target.value)}
+                  disabled={isHostedDeployment}
+                >
                   <option value="SBERT">SBERT (fast, local)</option>
                   <option value="LLM">Gemini 2.5 Flash (LLM API)</option>
                 </select>
@@ -518,11 +547,20 @@ export default function EvaluatePage() {
                   className="select-control"
                   value={ocrBackend}
                   onChange={(e) => setOcrBackend(e.target.value)}
+                  disabled={isHostedDeployment}
                 >
                   <option value="easyocr">Current / printed sheets (EasyOCR)</option>
                   <option value="azure">Handwritten sheets (Azure Document Intelligence)</option>
                 </select>
               </label>
+
+              {isHostedDeployment ? (
+                <div className="status-card">
+                  <strong>Hosted mode is optimized for production stability.</strong>
+                  The deployed website uses Azure OCR and Gemini evaluation by default. Use the
+                  local Streamlit workspace for the full SBERT + EasyOCR research pipeline.
+                </div>
+              ) : null}
 
               {requiresAzure && runtimeConfig?.azure_configured ? (
                 <div className="status-card">
