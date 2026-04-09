@@ -330,6 +330,16 @@ export default function EvaluatePage() {
   }, []);
 
   useEffect(() => {
+    if (!isHostedDeployment) {
+      return;
+    }
+
+    if (ocrBackend === "easyocr") {
+      setOcrBackend("azure");
+    }
+  }, [isHostedDeployment, ocrBackend]);
+
+  useEffect(() => {
     if (!currentRun || !["queued", "running"].includes(currentRun.status) || hostedUsesSynchronousRuns) {
       return undefined;
     }
@@ -574,25 +584,28 @@ export default function EvaluatePage() {
                 </select>
               </label>
 
-              <label>
-                <span className="field-label">OCR Mode</span>
-                <select
-                  className="select-control"
-                  value={ocrBackend}
-                  onChange={(e) => setOcrBackend(e.target.value)}
-                >
-                  <option value="easyocr">Current / printed sheets (EasyOCR)</option>
-                  <option value="azure">Handwritten sheets (Azure Document Intelligence)</option>
-                </select>
-              </label>
+                <label>
+                  <span className="field-label">OCR Mode</span>
+                  <select
+                    className="select-control"
+                    value={ocrBackend}
+                    onChange={(e) => setOcrBackend(e.target.value)}
+                  >
+                    <option value="easyocr" disabled={isHostedDeployment}>
+                      Current / printed sheets (EasyOCR{isHostedDeployment ? ", local only" : ""})
+                    </option>
+                    <option value="azure">Handwritten sheets (Azure Document Intelligence)</option>
+                  </select>
+                </label>
 
-              {isHostedDeployment ? (
-                <div className="status-card">
-                  <strong>Hosted mode keeps the production backend path stable.</strong>
-                  The deployed website still runs evaluation through the production backend, but
-                  you can now switch OCR and evaluation engines directly from this interface.
-                </div>
-              ) : null}
+                {isHostedDeployment ? (
+                  <div className="status-card">
+                    <strong>Hosted mode keeps the production backend path stable.</strong>
+                    The deployed website still runs evaluation through the production backend. In
+                    production, Azure OCR is used for stability, while both SBERT and Gemini remain
+                    available as evaluation engines.
+                  </div>
+                ) : null}
 
               {requiresAzure && runtimeConfig?.azure_configured ? (
                 <div className="status-card">
@@ -602,13 +615,13 @@ export default function EvaluatePage() {
                 </div>
               ) : null}
 
-              {isHostedDeployment && !requiresAzure ? (
-                <div className="status-card">
-                  <strong>Printed OCR is enabled on the hosted backend.</strong>
-                  EasyOCR and SBERT remain available in production, so you can test the same
-                  printed-sheet flow from the web interface.
-                </div>
-              ) : null}
+                {isHostedDeployment && !requiresAzure ? (
+                  <div className="status-card">
+                    <strong>EasyOCR remains a local workspace feature.</strong>
+                    The hosted website uses Azure Document Intelligence for OCR because the local
+                    EasyOCR production path is too heavy for the live cloud runtime.
+                  </div>
+                ) : null}
 
               {requiresAzure && engine === "LLM" && runtimeConfig && !runtimeConfig.gemini_configured ? (
                 <div className="status-card status-card--error">
