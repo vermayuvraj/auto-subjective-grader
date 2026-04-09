@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-PORT_VALUE="${WEBSITES_PORT:-${PORT:-8001}}"
+PORT_VALUE="${PORT:-8001}"
 
 echo "Starting FastAPI backend on port ${PORT_VALUE}"
 echo "API_RUNS_ROOT=${API_RUNS_ROOT:-unset}"
