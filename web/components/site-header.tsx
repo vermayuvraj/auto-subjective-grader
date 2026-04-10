@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -17,11 +18,14 @@ export function SiteHeader() {
     <header className="site-header">
       <div className="site-header__inner">
         <Link href="/" className="brand-mark">
-          <span className="brand-mark__icon">AG</span>
-          <span>
-            <strong>Auto Subjective Grader</strong>
-            <small>Multimodal Evaluation Workspace</small>
-          </span>
+          <Image
+            src="/brand/ai-grader-logo.png"
+            alt="Ai Grader"
+            width={877}
+            height={173}
+            priority
+            className="brand-mark__logo"
+          />
         </Link>
         <nav className="site-nav">
           {navItems.map((item) => (

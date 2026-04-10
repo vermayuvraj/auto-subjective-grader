@@ -84,33 +84,12 @@ textarea {
 .brand-mark {
   display: flex;
   align-items: center;
-  gap: 14px;
+  min-width: 0;
 }
 
-.brand-mark__icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 16px;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  color: white;
-  background: linear-gradient(135deg, var(--secondary), var(--primary), var(--accent));
-  box-shadow: 0 14px 32px rgba(93, 126, 252, 0.28);
-}
-
-.brand-mark strong,
-.brand-mark small {
-  display: block;
-}
-
-.brand-mark strong {
-  font-size: 1rem;
-}
-
-.brand-mark small {
-  margin-top: 2px;
-  color: var(--muted);
+.brand-mark__logo {
+  width: clamp(168px, 19vw, 286px);
+  height: auto;
 }
 
 .site-nav {
@@ -1600,7 +1579,7 @@ tbody tr:hover {
   }
 
   .brand-mark {
-    align-items: flex-start;
+    width: 100%;
   }
 
   .site-nav {
