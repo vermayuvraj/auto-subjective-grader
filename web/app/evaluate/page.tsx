@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, SVGProps, useEffect, useMemo, useState } from "react";
 import { SectionShell } from "../../components/section-shell";
 import { BROWSER_API_BASE_URL } from "../../lib/api";
 
@@ -106,6 +106,26 @@ const WORKFLOW_BLOCKS: WorkflowBlock[] = [
     detail: "JSON outputs, ranking table, and PDF reports",
   },
 ];
+
+function IconHistory(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M4 12a8 8 0 1 0 2.35-5.65" />
+      <path d="M4 4v4h4" />
+      <path d="M12 8v5l3 2" />
+    </svg>
+  );
+}
+
+function IconDownload(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M12 4v10" />
+      <path d="m8 10 4 4 4-4" />
+      <path d="M5 19h14" />
+    </svg>
+  );
+}
 
 function formatTimestamp(value: string | null): string {
   if (!value) {
@@ -334,16 +354,6 @@ export default function EvaluatePage() {
   }, []);
 
   useEffect(() => {
-    if (!isHostedDeployment) {
-      return;
-    }
-
-    if (ocrBackend === "easyocr") {
-      setOcrBackend("google_vision");
-    }
-  }, [isHostedDeployment, ocrBackend]);
-
-  useEffect(() => {
     if (!currentRun || !["queued", "running"].includes(currentRun.status) || hostedUsesSynchronousRuns) {
       return undefined;
     }
@@ -462,14 +472,18 @@ export default function EvaluatePage() {
           created_at: now,
           started_at: now,
           completed_at: null,
-          current_step: 0,
-          total_steps: 0,
-          progress_percent: 0,
-          message: "Cloud evaluation is running synchronously. Please wait for the final result.",
+          current_step: 1,
+          total_steps: WORKFLOW_BLOCKS.length,
+          progress_percent: 8,
+          message: "Inputs received. Preparing OCR extraction.",
           events: [
             {
               timestamp: now,
               message: "Synchronous cloud evaluation started.",
+            },
+            {
+              timestamp: now,
+              message: "Files validated and queued for processing.",
             },
           ],
           elapsed_seconds: null,
@@ -511,24 +525,24 @@ export default function EvaluatePage() {
   return (
     <>
       <SectionShell
-        title="Evaluation Command Center"
-        subtitle="Configure a batch, run the multimodal grading pipeline, and follow each connected stage live from OCR to final report generation."
+        title="Evaluate Answer Sheets"
+        subtitle="Upload the answer sheets, choose the scoring path, and follow the live workflow from OCR to final report generation."
       >
         <div className="results-grid">
           <div className="metric-card">
-            <span>Total Recorded Runs</span>
+            <span>Saved Sessions</span>
             <strong>{runHistory.length}</strong>
           </div>
           <div className="metric-card">
-            <span>Active Queue State</span>
+            <span>Live Status</span>
             <strong>{currentRun ? currentRun.status.toUpperCase() : "IDLE"}</strong>
           </div>
           <div className="metric-card">
-            <span>Last Completed Run</span>
+            <span>Last Run Time</span>
             <strong>{lastCompletedRun ? formatDuration(lastCompletedRun.elapsed_seconds) : "No run yet"}</strong>
           </div>
           <div className="metric-card">
-            <span>Best Recent Score</span>
+            <span>Best Recent Result</span>
             <strong>
               {bestRecentRun?.top_student
                 ? `${bestRecentRun.top_student} (${bestRecentRun.top_percentage?.toFixed(2)}%)`
@@ -537,11 +551,15 @@ export default function EvaluatePage() {
           </div>
         </div>
 
-        <form className="two-column" onSubmit={handleSubmit}>
-          <div className="section-shell" style={{ marginTop: 0 }}>
-            <div className="section-shell__header">
-              <h2>Launch A New Run</h2>
-              <p>Choose the files and execution mode. The backend will create a run ID and handle the pipeline in the background.</p>
+        <form className="evaluate-layout" onSubmit={handleSubmit}>
+          <div className="evaluate-panel">
+            <div className="evaluate-panel__header">
+              <span className="evaluate-panel__step">Step 1 · Inputs & configuration</span>
+              <h3>Create a new evaluation run</h3>
+              <p>
+                Add the ideal sheet, rubric, and student sheets first. Then select the OCR and
+                scoring path you want the pipeline to use for this run.
+              </p>
             </div>
             <div className="form-grid">
               <label>
@@ -555,7 +573,13 @@ export default function EvaluatePage() {
               </label>
 
               <label>
-                <span className="field-label">Rubric JSON</span>
+                <div className="field-row">
+                  <span className="field-label">Rubric JSON</span>
+                  <a className="link-chip" href="/samples/sample-rubric.json" download>
+                    <IconDownload width={14} height={14} />
+                    Download sample rubric
+                  </a>
+                </div>
                 <input
                   className="file-control"
                   type="file"
@@ -576,17 +600,18 @@ export default function EvaluatePage() {
                 <div className="field-help">{studentPdfs.length} student file(s) ready for upload.</div>
               </label>
 
-              <label>
-                <span className="field-label">Evaluation Engine</span>
-                <select
-                  className="select-control"
-                  value={engine}
-                  onChange={(e) => setEngine(e.target.value)}
-                >
-                  <option value="SBERT">SBERT (fast, local)</option>
-                  <option value="LLM">Gemini 2.5 Flash (LLM API)</option>
-                </select>
-              </label>
+              <div className="evaluate-config-grid">
+                <label>
+                  <span className="field-label">Evaluation Engine</span>
+                  <select
+                    className="select-control"
+                    value={engine}
+                    onChange={(e) => setEngine(e.target.value)}
+                  >
+                    <option value="SBERT">SBERT (fast, local)</option>
+                    <option value="LLM">Gemini 2.5 Flash (LLM API)</option>
+                  </select>
+                </label>
 
                 <label>
                   <span className="field-label">OCR Mode</span>
@@ -595,22 +620,26 @@ export default function EvaluatePage() {
                     value={ocrBackend}
                     onChange={(e) => setOcrBackend(e.target.value)}
                   >
-                    <option value="easyocr" disabled={isHostedDeployment}>
-                      Current / printed sheets (EasyOCR{isHostedDeployment ? ", local only" : ""})
-                    </option>
+                    <option value="easyocr">Current / printed sheets (EasyOCR)</option>
                     <option value="google_vision">Handwritten sheets (Google Vision AI)</option>
                     <option value="azure">Handwritten sheets (Azure Document Intelligence)</option>
                   </select>
                 </label>
+              </div>
 
-                {isHostedDeployment ? (
-                  <div className="status-card">
-                    <strong>Hosted mode keeps the production backend path stable.</strong>
-                    The deployed website still runs evaluation through the production backend. In
-                    production, Google Vision AI is the preferred cloud OCR path, while both SBERT
-                    and Gemini remain available as evaluation engines.
-                  </div>
-                ) : null}
+              {isHostedDeployment ? (
+                <div className="status-card">
+                  <strong>Hosted mode keeps the production backend path stable.</strong>
+                  The deployed interface runs through the production backend, but OCR and evaluation
+                  mode can still be changed directly from this screen.
+                </div>
+              ) : (
+                <div className="status-card">
+                  <strong>Local workspace mode is active.</strong>
+                  This setup is ideal for research testing, debugging, and comparing different OCR
+                  or scoring paths before pushing changes live.
+                </div>
+              )}
 
               {ocrBackend === "google_vision" ? (
                 <div className="status-card">
@@ -622,19 +651,11 @@ export default function EvaluatePage() {
 
               {requiresAzure && runtimeConfig?.azure_configured ? (
                 <div className="status-card">
-                  <strong>Server-managed handwritten OCR is active.</strong>
-                  The deployed backend already has the handwritten OCR credentials it needs, so
-                  handwritten evaluation can run without exposing secrets in the web UI.
+                  <strong>Azure handwritten OCR is ready.</strong>
+                  The backend already has the credentials it needs, so handwritten evaluation can
+                  run without exposing secrets in the web interface.
                 </div>
               ) : null}
-
-                {isHostedDeployment && !requiresAzure ? (
-                  <div className="status-card">
-                    <strong>EasyOCR remains a local workspace feature.</strong>
-                    The hosted website uses Google Vision AI for OCR because the local EasyOCR
-                    production path is too heavy for the live cloud runtime.
-                  </div>
-                ) : null}
 
               {requiresAzure && engine === "LLM" && runtimeConfig && !runtimeConfig.gemini_configured ? (
                 <div className="status-card status-card--error">
@@ -644,7 +665,7 @@ export default function EvaluatePage() {
               ) : null}
 
               {needsManualAzureSecrets ? (
-                <>
+                <div className="evaluate-config-grid">
                   <label>
                     <span className="field-label">Azure Endpoint</span>
                     <input
@@ -665,61 +686,45 @@ export default function EvaluatePage() {
                       placeholder="Paste the Azure key here"
                     />
                   </label>
-                </>
+                </div>
               ) : null}
 
               <div className="inline-actions">
                 <button className="button-primary" type="submit" disabled={isSubmitting || isPolling}>
-                  {isSubmitting ? "Creating Job..." : isPolling ? "Job Running..." : "Launch Evaluation Job"}
+                  {isSubmitting ? "Creating Job..." : isPolling ? "Job Running..." : "Run Evaluation"}
                 </button>
                 <button className="button-secondary" type="button" onClick={() => void refreshHistory()}>
+                  <IconHistory width={14} height={14} />
                   Refresh History
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="section-shell" style={{ marginTop: 0 }}>
-            <div className="section-shell__header">
-              <h2>Live Workflow</h2>
-              <p>Watch the connected pipeline blocks update in sequence while the job runs.</p>
+          <div className="evaluate-panel">
+            <div className="evaluate-panel__header">
+              <span className="evaluate-panel__step">Step 2 · Workflow & tracking</span>
+              <h3>Live workflow tracker</h3>
+              <p>
+                Follow the run from input validation to report generation with a cleaner stage view
+                and execution timeline.
+              </p>
             </div>
 
             {currentRun ? (
               <div className="monitor-stack">
-                <div className="status-row">
-                  <span className={getStatusTone(currentRun.status)}>{currentRun.status.toUpperCase()}</span>
-                  <span className="pill">{getEngineLabel(currentRun.engine)}</span>
-                  <span className="pill">{getOcrLabel(currentRun.ocr_backend)}</span>
-                </div>
-
-                <div className="workflow-monitor">
-                  <div className="workflow-monitor__head">
-                    <div>
-                      <strong>{currentRun.message}</strong>
-                      <span>Run ID {currentRun.run_id}</span>
-                    </div>
-                    <div className="workflow-monitor__stats">
-                      <span>{currentRun.progress_percent}% complete</span>
-                      <span>{formatDuration(currentElapsed)}</span>
-                      <span>{getStepsPerMinute(currentRun)}</span>
-                    </div>
+                <div className="workflow-summary-card">
+                  <div>
+                    <span className="workflow-summary-card__label">Current stage</span>
+                    <strong>{currentRun.message}</strong>
+                    <span className="workflow-summary-card__label">Run ID {currentRun.run_id}</span>
                   </div>
-
-                  <div className="workflow-diagram">
-                    {workflowBlocks.map((block, index) => (
-                      <div className="workflow-diagram__segment" key={block.key}>
-                        <article className={`workflow-block workflow-block--${block.state}`}>
-                          <div className="workflow-block__top">
-                            <span className="workflow-block__index">{index + 1}</span>
-                            <span className="workflow-block__state">{block.state}</span>
-                          </div>
-                          <h3>{block.title}</h3>
-                          <p>{block.detail}</p>
-                        </article>
-                        {index < workflowBlocks.length - 1 ? <div className="workflow-connector" /> : null}
-                      </div>
-                    ))}
+                  <div className="workflow-summary-card__stats">
+                    <span className={getStatusTone(currentRun.status)}>{currentRun.status.toUpperCase()}</span>
+                    <span>{getEngineLabel(currentRun.engine)}</span>
+                    <span>{getOcrLabel(currentRun.ocr_backend)}</span>
+                    <span>{formatDuration(currentElapsed)}</span>
+                    <span>{getStepsPerMinute(currentRun)}</span>
                   </div>
                 </div>
 
@@ -733,6 +738,26 @@ export default function EvaluatePage() {
                   <div className="progress-track">
                     <div className="progress-fill" style={{ width: `${Math.max(currentRun.progress_percent, 4)}%` }} />
                   </div>
+                </div>
+
+                <div className="workflow-simple-list">
+                  {workflowBlocks.map((block, index) => {
+                    const itemClass =
+                      block.state === "pending"
+                        ? "workflow-simple-item"
+                        : `workflow-simple-item workflow-simple-item--${block.state}`;
+
+                    return (
+                      <article className={itemClass} key={block.key}>
+                        <span className="workflow-simple-item__index">{index + 1}</span>
+                        <div className="workflow-simple-item__body">
+                          <strong>{block.title}</strong>
+                          <span>{block.detail}</span>
+                        </div>
+                        <span className="workflow-simple-item__state">{block.state}</span>
+                      </article>
+                    );
+                  })}
                 </div>
 
                 {currentRun.error ? <div className="status-card status-card--error">{currentRun.error}</div> : null}
@@ -819,6 +844,7 @@ export default function EvaluatePage() {
                             target="_blank"
                             rel="noreferrer"
                           >
+                            <IconDownload width={14} height={14} />
                             Download PDF
                           </a>
                         ) : (
@@ -838,6 +864,16 @@ export default function EvaluatePage() {
         title="Recent Run History"
         subtitle="Reopen earlier evaluations, compare engines and OCR modes, and keep your testing workflow traceable as the dataset grows."
       >
+        <div className="history-heading">
+          <span className="history-heading__icon">
+            <IconHistory width={16} height={16} />
+          </span>
+          <div>
+            <strong>Saved evaluation sessions</strong>
+            <span>Quick access to earlier runs, modes, timing, and top-scoring outputs.</span>
+          </div>
+        </div>
+
         {isHistoryLoading ? (
           <div className="empty-state">
             <strong>Loading runs...</strong>
@@ -852,7 +888,12 @@ export default function EvaluatePage() {
                   <span className="pill">{getEngineLabel(run.engine)}</span>
                 </div>
 
-                <h3>{run.run_id}</h3>
+                <div className="run-history-card__title">
+                  <span className="run-history-card__icon">
+                    <IconHistory width={15} height={15} />
+                  </span>
+                  <h3>{run.run_id}</h3>
+                </div>
 
                 <div className="history-meta">
                   <span>{getOcrLabel(run.ocr_backend)}</span>

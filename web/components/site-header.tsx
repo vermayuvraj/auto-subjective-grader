@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SVGProps, useEffect, useState } from "react";
 
 const navItems = [
   { href: "/", label: "Home" },
@@ -11,8 +12,40 @@ const navItems = [
   { href: "/team", label: "Team" },
 ];
 
+function ThemeIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M12 3v2.5" />
+      <path d="M12 18.5V21" />
+      <path d="m5.64 5.64 1.77 1.77" />
+      <path d="m16.59 16.59 1.77 1.77" />
+      <path d="M3 12h2.5" />
+      <path d="M18.5 12H21" />
+      <path d="m5.64 18.36 1.77-1.77" />
+      <path d="m16.59 7.41 1.77-1.77" />
+      <circle cx="12" cy="12" r="4" />
+    </svg>
+  );
+}
+
 export function SiteHeader() {
   const pathname = usePathname();
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("ai-grader-theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const darkMode = savedTheme ? savedTheme === "dark" : prefersDark;
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    setIsDarkMode(darkMode);
+  }, []);
+
+  function toggleTheme() {
+    const nextIsDark = !isDarkMode;
+    document.documentElement.dataset.theme = nextIsDark ? "dark" : "light";
+    window.localStorage.setItem("ai-grader-theme", nextIsDark ? "dark" : "light");
+    setIsDarkMode(nextIsDark);
+  }
 
   return (
     <header className="site-header">
@@ -38,9 +71,15 @@ export function SiteHeader() {
             </Link>
           ))}
         </nav>
-        <Link href="/evaluate" className="button-primary site-header__cta">
-          Run Evaluation
-        </Link>
+        <div className="site-header__actions">
+          <button type="button" className="theme-toggle" onClick={toggleTheme}>
+            <ThemeIcon width={16} height={16} />
+            {isDarkMode ? "Light" : "Dark"}
+          </button>
+          <Link href="/evaluate" className="button-primary site-header__cta">
+            Run Evaluation
+          </Link>
+        </div>
       </div>
     </header>
   );
