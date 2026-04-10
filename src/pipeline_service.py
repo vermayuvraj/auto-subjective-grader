@@ -21,6 +21,7 @@ class PipelineServiceConfig:
     dpi: int = 300
     use_gpu: bool = True
     languages: List[str] = None
+    google_vision_language_hints: List[str] = None
     rubric_path: str = "rubric.json"
     ocr_root: str = "results/ocr"
     diagram_root: str = "results/diagrams"
@@ -70,6 +71,7 @@ def run_pipeline(
         use_gpu=config.use_gpu,
         output_root=config.ocr_root,
         backend=ocr_backend,
+        google_vision_language_hints=config.google_vision_language_hints,
         azure_document_intelligence_endpoint=azure_settings.get("endpoint"),
         azure_document_intelligence_key=azure_settings.get("key"),
     )
@@ -133,6 +135,8 @@ def run_pipeline(
     if ocr_backend == "easyocr":
         reader = ocr_pipeline.build_easyocr_reader(ocr_cfg)
         ocr_label = "EasyOCR"
+    elif ocr_backend == "google_vision":
+        ocr_label = "Google Vision AI"
     else:
         ocr_label = "Azure Document Intelligence"
 

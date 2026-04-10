@@ -147,8 +147,11 @@ def _validate_inputs(
         raise HTTPException(status_code=400, detail="Engine must be SBERT or LLM.")
 
     ocr_backend = ocr_backend.lower()
-    if ocr_backend not in {"easyocr", "azure"}:
-        raise HTTPException(status_code=400, detail="OCR backend must be easyocr or azure.")
+    if ocr_backend not in {"easyocr", "azure", "google_vision"}:
+        raise HTTPException(
+            status_code=400,
+            detail="OCR backend must be easyocr, google_vision, or azure.",
+        )
 
     has_server_managed_azure = bool(SETTINGS.azure_endpoint and SETTINGS.azure_key)
     if ocr_backend == "azure" and (not azure_endpoint or not azure_key) and not has_server_managed_azure:
@@ -165,13 +168,11 @@ def _coerce_hosted_ocr_backend(
     azure_key: Optional[str],
 ) -> Tuple[str, Optional[str]]:
     is_cloud_run = bool(os.getenv("K_SERVICE"))
-    has_server_managed_azure = bool(SETTINGS.azure_endpoint and SETTINGS.azure_key)
-    has_request_azure = bool(azure_endpoint and azure_key)
 
-    if is_cloud_run and ocr_backend == "easyocr" and (has_server_managed_azure or has_request_azure):
+    if is_cloud_run and ocr_backend == "easyocr":
         return (
-            "azure",
-            "EasyOCR was requested on the hosted backend, so the run was switched to Azure Document Intelligence for production stability.",
+            "google_vision",
+            "EasyOCR was requested on the hosted backend, so the run was switched to Google Vision AI for production stability.",
         )
 
     return ocr_backend, None
@@ -224,6 +225,7 @@ def _prepare_run_inputs(
         dpi=300,
         use_gpu=SETTINGS.easyocr_use_gpu,
         languages=["en"],
+        google_vision_language_hints=SETTINGS.google_vision_language_hints,
         rubric_path=str(run_root / "rubric.json"),
         ocr_root=str(outputs_dir / "ocr"),
         diagram_root=str(outputs_dir / "diagrams"),
@@ -456,6 +458,7 @@ def get_documentation() -> Dict[str, str]:
 def get_runtime_config() -> Dict[str, Any]:
     return {
         "azure_configured": bool(SETTINGS.azure_endpoint and SETTINGS.azure_key),
+        "google_vision_supported": True,
         "gemini_configured": SETTINGS.gemini_api_key_present,
         "allowed_origins": SETTINGS.allowed_origins,
     }

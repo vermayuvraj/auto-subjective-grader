@@ -8,6 +8,7 @@ pdf2image
 
 # OCR
 easyocr
+google-cloud-vision
 google-cloud-documentai
 azure-ai-documentintelligence
 pix2tex

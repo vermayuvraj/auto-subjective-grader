@@ -61,6 +61,7 @@ type RunSummary = {
 
 type RuntimeConfig = {
   azure_configured: boolean;
+  google_vision_supported: boolean;
   gemini_configured: boolean;
   allowed_origins: string[];
 };
@@ -81,7 +82,7 @@ const WORKFLOW_BLOCKS: WorkflowBlock[] = [
   {
     key: "ocr",
     title: "OCR Extraction",
-    detail: "EasyOCR or Azure Document Intelligence",
+    detail: "EasyOCR, Google Vision AI, or Azure Document Intelligence",
   },
   {
     key: "formula",
@@ -140,6 +141,9 @@ function getEngineLabel(engine: string): string {
 }
 
 function getOcrLabel(ocrBackend: string): string {
+  if (ocrBackend === "google_vision") {
+    return "Handwritten sheets (Google Vision AI)";
+  }
   return ocrBackend === "azure"
     ? "Handwritten sheets (Azure Document Intelligence)"
     : "Current / printed sheets (EasyOCR)";
@@ -335,7 +339,7 @@ export default function EvaluatePage() {
     }
 
     if (ocrBackend === "easyocr") {
-      setOcrBackend("azure");
+      setOcrBackend("google_vision");
     }
   }, [isHostedDeployment, ocrBackend]);
 
@@ -594,6 +598,7 @@ export default function EvaluatePage() {
                     <option value="easyocr" disabled={isHostedDeployment}>
                       Current / printed sheets (EasyOCR{isHostedDeployment ? ", local only" : ""})
                     </option>
+                    <option value="google_vision">Handwritten sheets (Google Vision AI)</option>
                     <option value="azure">Handwritten sheets (Azure Document Intelligence)</option>
                   </select>
                 </label>
@@ -602,10 +607,18 @@ export default function EvaluatePage() {
                   <div className="status-card">
                     <strong>Hosted mode keeps the production backend path stable.</strong>
                     The deployed website still runs evaluation through the production backend. In
-                    production, Azure OCR is used for stability, while both SBERT and Gemini remain
-                    available as evaluation engines.
+                    production, Google Vision AI is the preferred cloud OCR path, while both SBERT
+                    and Gemini remain available as evaluation engines.
                   </div>
                 ) : null}
+
+              {ocrBackend === "google_vision" ? (
+                <div className="status-card">
+                  <strong>Google Vision AI is active for handwritten OCR.</strong>
+                  This mode uses the backend&apos;s Google Cloud identity in production, and local
+                  Application Default Credentials when you run the backend on your own machine.
+                </div>
+              ) : null}
 
               {requiresAzure && runtimeConfig?.azure_configured ? (
                 <div className="status-card">
@@ -618,8 +631,8 @@ export default function EvaluatePage() {
                 {isHostedDeployment && !requiresAzure ? (
                   <div className="status-card">
                     <strong>EasyOCR remains a local workspace feature.</strong>
-                    The hosted website uses Azure Document Intelligence for OCR because the local
-                    EasyOCR production path is too heavy for the live cloud runtime.
+                    The hosted website uses Google Vision AI for OCR because the local EasyOCR
+                    production path is too heavy for the live cloud runtime.
                   </div>
                 ) : null}
 

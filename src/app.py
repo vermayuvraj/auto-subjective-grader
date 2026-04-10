@@ -74,7 +74,12 @@ RESOURCE_ITEMS = [
     {
         "category": "OCR",
         "name": "Azure Document Intelligence",
-        "purpose": "Handwritten answer-sheet OCR backend.",
+        "purpose": "Alternative handwritten answer-sheet OCR backend.",
+    },
+    {
+        "category": "OCR",
+        "name": "Google Vision AI",
+        "purpose": "Google Cloud handwriting-oriented OCR backend for scanned answer sheets.",
     },
     {
         "category": "Text Evaluation",
@@ -161,7 +166,7 @@ WORKFLOW_BLOCKS = [
         "title": "OCR Extraction",
         "short": "OCR",
         "description": "PDF pages are converted into images and text is extracted using the selected OCR backend.",
-        "tech": "pdf2image, Poppler, EasyOCR or Azure Document Intelligence",
+        "tech": "pdf2image, Poppler, EasyOCR, Google Vision AI, or Azure Document Intelligence",
     },
     {
         "key": "formula",
@@ -194,7 +199,7 @@ WORKFLOW_BLOCKS = [
 ]
 
 DOCUMENTATION_METRICS = [
-    {"label": "OCR Backends", "value": "2", "detail": "EasyOCR + Azure Document Intelligence"},
+    {"label": "OCR Backends", "value": "3", "detail": "EasyOCR + Google Vision AI + Azure Document Intelligence"},
     {"label": "Evaluation Paths", "value": "2", "detail": "SBERT local + Gemini LLM"},
     {"label": "Modalities", "value": "3", "detail": "Text, Diagram, Formula"},
     {"label": "Primary Outputs", "value": "3", "detail": "JSON, tables, PDF reports"},
@@ -216,10 +221,11 @@ DOCUMENTATION_STAGE_DETAILS = [
         "goal": "Convert PDFs into page-level text with block metadata.",
         "details": [
             "Printed or cleaner sheets are processed through EasyOCR.",
+            "Google Vision AI adds a cloud-native handwritten OCR path on Google infrastructure.",
             "Handwritten sheets are processed through Azure Document Intelligence.",
             "pdf2image and Poppler convert each PDF page into an image before OCR is applied.",
         ],
-        "tech": "pdf2image, Poppler, EasyOCR, Azure Document Intelligence",
+        "tech": "pdf2image, Poppler, EasyOCR, Google Vision AI, Azure Document Intelligence",
     },
     {
         "title": "3. Formula Understanding",
@@ -980,8 +986,9 @@ def render_feature_cards() -> None:
                     <div class="feature-icon">1</div>
                     <div class="feature-title">Multimodal OCR</div>
                     <div class="feature-desc">
-                        Use EasyOCR for printed or cleaner sheets and Azure Document Intelligence
-                        for handwritten answer sheets without changing the rest of the pipeline.
+                        Use EasyOCR for printed sheets, Google Vision AI for Google-hosted handwritten
+                        OCR, or Azure Document Intelligence as an alternative handwritten path without
+                        changing the rest of the pipeline.
                     </div>
                 </div>
                 <div class="feature-card">
@@ -1113,7 +1120,8 @@ def render_workflow_section() -> None:
                     <div class="workflow-index">2</div>
                     <div class="workflow-title">OCR</div>
                     <div class="workflow-desc">
-                        Extract page-wise text using EasyOCR or Azure Document Intelligence based on the sheet type.
+                        Extract page-wise text using EasyOCR, Google Vision AI, or Azure Document
+                        Intelligence based on the sheet type.
                     </div>
                 </div>
                 <div class="workflow-step">
@@ -1482,6 +1490,7 @@ def run_full_pipeline(
         use_gpu=True,
         output_root=RESULTS_OCR_DIR,
         backend=ocr_backend,
+        google_vision_language_hints=["en-t-i0-handwrit", "en"],
         azure_document_intelligence_endpoint=azure_settings.get("endpoint"),
         azure_document_intelligence_key=azure_settings.get("key"),
     )
@@ -1542,6 +1551,9 @@ def run_full_pipeline(
         st.write("Initialising OCR (EasyOCR)...")
         reader = ocr_pipeline.build_easyocr_reader(ocr_cfg)
         ocr_label = "EasyOCR"
+    elif ocr_backend == "google_vision":
+        st.write("Initialising OCR (Google Vision AI handwritten mode)...")
+        ocr_label = "Google Vision AI"
     else:
         st.write("Initialising OCR (Azure Document Intelligence handwritten mode)...")
         ocr_label = "Azure Document Intelligence"
@@ -1792,13 +1804,19 @@ def render_evaluate_tab() -> None:
             "OCR Mode",
             [
                 "Current/printed sheets (EasyOCR)",
+                "Handwritten sheets (Google Vision AI)",
                 "Handwritten sheets (Azure Document Intelligence)",
             ],
             help="Choose the OCR backend that matches the batch you are processing.",
             key="ocr-mode",
         )
 
-        if ocr_mode.startswith("Handwritten"):
+        if "Google Vision" in ocr_mode:
+            st.caption(
+                "Google Vision handwritten mode uses Google Cloud Application Default Credentials "
+                "from your local machine or deployed runtime."
+            )
+        elif ocr_mode.startswith("Handwritten"):
             st.caption("Azure handwritten mode uses your Azure Document Intelligence endpoint and key.")
             azure_settings = {
                 "endpoint": st.text_input(
@@ -1853,7 +1871,12 @@ def render_evaluate_tab() -> None:
             return
 
         engine_flag = "SBERT" if engine_choice.startswith("SBERT") else "LLM"
-        ocr_backend = "azure" if ocr_mode.startswith("Handwritten") else "easyocr"
+        if "Google Vision" in ocr_mode:
+            ocr_backend = "google_vision"
+        elif "Azure" in ocr_mode:
+            ocr_backend = "azure"
+        else:
+            ocr_backend = "easyocr"
 
         if ocr_backend == "azure":
             missing_fields = [
@@ -2019,12 +2042,18 @@ def main():
             "OCR Mode",
             [
                 "Current/printed sheets (EasyOCR)",
+                "Handwritten sheets (Google Vision AI)",
                 "Handwritten sheets (Azure Document Intelligence)",
             ],
             help="Choose the OCR backend that matches the batch you are processing.",
         )
 
-        if ocr_mode.startswith("Handwritten"):
+        if "Google Vision" in ocr_mode:
+            st.caption(
+                "Google Vision handwritten mode uses Google Cloud Application Default Credentials "
+                "from your local machine or deployed runtime."
+            )
+        elif ocr_mode.startswith("Handwritten"):
             st.caption(
                 "Azure handwritten mode uses your Azure Document Intelligence endpoint and key."
             )
@@ -2069,7 +2098,12 @@ def main():
         return
 
     engine_flag = "SBERT" if engine_choice.startswith("SBERT") else "LLM"
-    ocr_backend = "azure" if ocr_mode.startswith("Handwritten") else "easyocr"
+    if "Google Vision" in ocr_mode:
+        ocr_backend = "google_vision"
+    elif "Azure" in ocr_mode:
+        ocr_backend = "azure"
+    else:
+        ocr_backend = "easyocr"
 
     if ocr_backend == "azure":
         missing_fields = [

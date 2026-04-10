@@ -7,7 +7,7 @@ type DocumentationResponse = {
 };
 
 const metrics = [
-  { label: "OCR Backends", value: "2", detail: "EasyOCR and Azure Document Intelligence" },
+  { label: "OCR Backends", value: "3", detail: "EasyOCR, Google Vision AI, and Azure Document Intelligence" },
   { label: "Scoring Engines", value: "2", detail: "SBERT local path and Gemini LLM path" },
   { label: "Modalities", value: "3", detail: "Text, diagrams, and formula understanding" },
   { label: "Primary Outputs", value: "3", detail: "JSON, live ranking table, and PDF reports" },
@@ -42,9 +42,10 @@ const stageDetails = [
   {
     title: "OCR and Content Capture",
     goal: "Convert PDF pages into structured textual evidence.",
-    tech: "pdf2image, Poppler, EasyOCR, Azure Document Intelligence",
+    tech: "pdf2image, Poppler, EasyOCR, Google Vision AI, Azure Document Intelligence",
     points: [
       "EasyOCR is used for cleaner printed answer sheets.",
+      "Google Vision AI provides a cloud-native handwritten OCR path on Google infrastructure.",
       "Azure Document Intelligence is used for handwritten sheets.",
       "OCR output is stored page-wise for downstream reuse.",
     ],
@@ -103,6 +104,7 @@ const techPills = [
   "FastAPI",
   "Streamlit",
   "EasyOCR",
+  "Google Vision AI",
   "Azure Document Intelligence",
   "Sentence Transformers",
   "CLIP",

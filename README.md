@@ -7,7 +7,7 @@ This project is a multimodal subjective answer-sheet evaluation system built for
 ## Core Capabilities
 
 - OCR for printed sheets using EasyOCR
-- OCR for handwritten sheets using Azure Document Intelligence
+- OCR for handwritten sheets using Google Vision AI or Azure Document Intelligence
 - Semantic answer evaluation using Sentence-BERT
 - LLM-assisted evaluation using Gemini
 - Diagram extraction and similarity scoring
@@ -35,6 +35,10 @@ Used for cleaner, printed, or less noisy answer sheets.
 ### Handwritten sheets (Azure Document Intelligence)
 
 Used for handwritten answer sheets and works page by page to stay within practical resource limits.
+
+### Handwritten sheets (Google Vision AI)
+
+Used for handwritten answer sheets when you want a Google Cloud-native OCR path driven by Application Default Credentials.
 
 ## Current Evaluation Modes
 
@@ -81,6 +85,7 @@ This allows mathematically equivalent expressions such as `(x+1)^2` and `x^2 + 2
 - FastAPI
 - Next.js
 - EasyOCR
+- Google Vision AI
 - Azure Document Intelligence
 - Sentence Transformers
 - OpenAI CLIP
@@ -103,7 +108,7 @@ This split is preferred because:
 - Vercel is ideal for the professional Next.js frontend
 - Cloud Run gives the backend a direct HTTPS URL and handles container deployment cleanly
 - Cloud Run supports larger request bodies and longer request timeouts than the Vercel upload-proxy path
-- handwritten OCR can still use Azure Document Intelligence only as an OCR provider, not as the hosting platform
+- handwritten OCR can use Google Vision AI or Azure Document Intelligence without tying hosting to Azure
 
 Deployment guide:
 

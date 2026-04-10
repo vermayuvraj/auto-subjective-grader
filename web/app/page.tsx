@@ -4,8 +4,8 @@ import { SectionShell } from "../components/section-shell";
 const signalCards = [
   {
     label: "OCR Modes",
-    value: "2",
-    detail: "Printed sheets with EasyOCR and handwritten sheets with Azure Document Intelligence.",
+    value: "3",
+    detail: "Printed sheets with EasyOCR, plus handwritten OCR through Google Vision AI or Azure.",
   },
   {
     label: "Evaluation Paths",
@@ -99,7 +99,8 @@ export default function HomePage() {
               <strong>Unified pipeline from upload to scoring report</strong>
               <p>
                 The same engine powers printed-sheet OCR, handwritten OCR, formula scoring,
-                diagram comparison, and final report generation.
+                diagram comparison, and final report generation across local and cloud-ready
+                deployment paths.
               </p>
               <div className="hero-score-strip">
                 <div>

@@ -52,7 +52,12 @@ RESOURCE_ITEMS = [
     {
         "category": "OCR",
         "name": "Azure Document Intelligence",
-        "purpose": "Handwritten answer-sheet OCR backend.",
+        "purpose": "Alternative handwritten answer-sheet OCR backend.",
+    },
+    {
+        "category": "OCR",
+        "name": "Google Vision AI",
+        "purpose": "Google Cloud handwriting-aware OCR backend for scanned answer sheets.",
     },
     {
         "category": "Text Evaluation",

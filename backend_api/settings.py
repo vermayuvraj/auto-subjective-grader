@@ -29,6 +29,7 @@ class AppSettings:
     readme_path: Path
     allowed_origins: List[str]
     easyocr_use_gpu: bool
+    google_vision_language_hints: List[str]
     azure_endpoint: Optional[str]
     azure_key: Optional[str]
     gemini_api_key_present: bool
@@ -39,6 +40,10 @@ def load_settings(project_root: Path) -> AppSettings:
     api_runs_root = Path(os.getenv("API_RUNS_ROOT", str(project_root / "results" / "api_runs")))
     readme_path = Path(os.getenv("README_PATH", str(project_root / "README.md")))
     allowed_origins = _read_csv("ALLOWED_ORIGINS", DEFAULT_ALLOWED_ORIGINS)
+    google_vision_language_hints = _read_csv(
+        "GOOGLE_VISION_LANGUAGE_HINTS",
+        ["en-t-i0-handwrit", "en"],
+    )
 
     azure_endpoint = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")
     azure_key = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_KEY")
@@ -50,6 +55,7 @@ def load_settings(project_root: Path) -> AppSettings:
         readme_path=readme_path,
         allowed_origins=allowed_origins,
         easyocr_use_gpu=_read_bool("EASYOCR_USE_GPU", False),
+        google_vision_language_hints=google_vision_language_hints,
         azure_endpoint=azure_endpoint,
         azure_key=azure_key,
         gemini_api_key_present=bool(gemini_api_key),

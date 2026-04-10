@@ -3,7 +3,8 @@ Step 1: OCR Pipeline
 
 Supports two OCR backends:
 - EasyOCR for the existing local flow
-- Google Document AI for handwritten answer sheets
+- Google Vision AI for handwritten answer sheets
+- Google Document AI for processor-based experiments
 
 Both backends save OCR results as JSON in results/ocr/:
 
@@ -30,6 +31,16 @@ except ImportError:  # optional until handwritten mode is used
     documentai = None
 
 try:
+    from google.cloud import vision
+except ImportError:  # optional until Google Vision mode is used
+    vision = None
+
+try:
+    from google.auth.exceptions import DefaultCredentialsError
+except ImportError:
+    DefaultCredentialsError = Exception
+
+try:
     from azure.ai.documentintelligence import DocumentIntelligenceClient
     from azure.core.credentials import AzureKeyCredential
 except ImportError:  # optional until handwritten mode is used
@@ -45,6 +56,7 @@ class OCRConfig:
     use_gpu: bool = True
     output_root: str = "results/ocr"
     backend: str = "easyocr"
+    google_vision_language_hints: List[str] = None
     document_ai_project_id: Optional[str] = None
     document_ai_location: str = "us"
     document_ai_processor_id: Optional[str] = None
@@ -106,6 +118,26 @@ def _require_document_ai() -> None:
             "google-cloud-documentai is not installed. "
             "Install it before using handwritten OCR mode."
         )
+
+
+def _require_google_vision() -> None:
+    if vision is None:
+        raise RuntimeError(
+            "google-cloud-vision is not installed. "
+            "Install it before using Google Vision OCR mode."
+        )
+
+
+def _build_google_vision_client():
+    _require_google_vision()
+    try:
+        return vision.ImageAnnotatorClient()
+    except DefaultCredentialsError as exc:
+        raise RuntimeError(
+            "Google Vision OCR requires Google Application Default Credentials. "
+            "Run `gcloud auth application-default login` locally or deploy on Google Cloud "
+            "with Vision API access enabled."
+        ) from exc
 
 
 def _text_from_anchor(full_text: str, text_anchor) -> str:
@@ -180,6 +212,100 @@ def _require_azure_document_intelligence() -> None:
             "azure-ai-documentintelligence is not installed. "
             "Install it before using handwritten OCR mode."
         )
+
+
+def _pil_image_to_google_vision_bytes(pil_img) -> bytes:
+    max_bytes = 10 * 1024 * 1024
+    work_img = pil_img.convert("RGB")
+
+    buffer = BytesIO()
+    work_img.save(buffer, format="PNG")
+    png_data = buffer.getvalue()
+    if len(png_data) <= max_bytes:
+        return png_data
+
+    for quality in (90, 80, 70, 60):
+        buffer = BytesIO()
+        work_img.save(buffer, format="JPEG", quality=quality, optimize=True)
+        jpeg_data = buffer.getvalue()
+        if len(jpeg_data) <= max_bytes:
+            return jpeg_data
+
+    for scale in (0.85, 0.7, 0.55):
+        resized = work_img.resize(
+            (
+                max(1, int(work_img.width * scale)),
+                max(1, int(work_img.height * scale)),
+            ),
+            Image.Resampling.LANCZOS,
+        )
+        for quality in (80, 70, 60):
+            buffer = BytesIO()
+            resized.save(buffer, format="JPEG", quality=quality, optimize=True)
+            jpeg_data = buffer.getvalue()
+            if len(jpeg_data) <= max_bytes:
+                return jpeg_data
+
+    raise RuntimeError(
+        "Google Vision OCR page image is too large even after compression. "
+        "Try a lower DPI for the OCR pass."
+    )
+
+
+def _vision_vertices_to_bbox(vertices) -> List[List[float]]:
+    if not vertices:
+        return []
+    return [[float(vertex.x), float(vertex.y)] for vertex in vertices]
+
+
+def _vision_word_text(word) -> str:
+    return "".join(symbol.text for symbol in getattr(word, "symbols", [])).strip()
+
+
+def _vision_paragraph_text(paragraph) -> str:
+    words = [_vision_word_text(word) for word in getattr(paragraph, "words", [])]
+    return " ".join(word for word in words if word).strip()
+
+
+def _vision_page_blocks(page) -> List[Dict[str, Any]]:
+    blocks: List[Dict[str, Any]] = []
+
+    for block in getattr(page, "blocks", []):
+        paragraphs = list(getattr(block, "paragraphs", []) or [])
+        if paragraphs:
+            for paragraph in paragraphs:
+                text = _vision_paragraph_text(paragraph)
+                bbox = _vision_vertices_to_bbox(
+                    getattr(getattr(paragraph, "bounding_box", None), "vertices", None)
+                )
+                if not text or not bbox:
+                    continue
+                blocks.append(
+                    {
+                        "bbox": bbox,
+                        "text": text,
+                        "confidence": float(getattr(paragraph, "confidence", 0.0) or 0.0),
+                    }
+                )
+            continue
+
+        words = list(getattr(block, "words", []) or [])
+        for word in words:
+            text = _vision_word_text(word)
+            bbox = _vision_vertices_to_bbox(
+                getattr(getattr(word, "bounding_box", None), "vertices", None)
+            )
+            if not text or not bbox:
+                continue
+            blocks.append(
+                {
+                    "bbox": bbox,
+                    "text": text,
+                    "confidence": float(getattr(word, "confidence", 0.0) or 0.0),
+                }
+            )
+
+    return blocks
 
 
 def _azure_polygon_to_bbox(polygon) -> List[List[float]]:
@@ -332,6 +458,52 @@ def ocr_pdf_with_document_ai(pdf_path: str, config: OCRConfig) -> None:
     print(f"[OCR] Completed with Document AI: {pdf_path}")
 
 
+def ocr_pdf_with_google_vision(pdf_path: str, config: OCRConfig) -> None:
+    client = _build_google_vision_client()
+    language_hints = config.google_vision_language_hints or config.languages or [
+        "en-t-i0-handwrit",
+        "en",
+    ]
+
+    print(f"[OCR] Processing PDF with Google Vision AI: {pdf_path}")
+
+    if pdf_path.lower().endswith(".pdf"):
+        images = pdf_to_images(pdf_path, config)
+        for page_no, pil_img in enumerate(images, start=1):
+            page_bytes = _pil_image_to_google_vision_bytes(pil_img)
+            image = vision.Image(content=page_bytes)
+            image_context = vision.ImageContext(language_hints=language_hints)
+            response = client.document_text_detection(
+                image=image,
+                image_context=image_context,
+            )
+            if response.error.message:
+                raise RuntimeError(f"Google Vision OCR failed on page {page_no}: {response.error.message}")
+
+            annotation = getattr(response, "full_text_annotation", None)
+            page = annotation.pages[0] if annotation and annotation.pages else None
+            blocks = _vision_page_blocks(page) if page is not None else []
+            save_ocr_page(pdf_path, page_no, blocks, config)
+    else:
+        with open(pdf_path, "rb") as f:
+            image = vision.Image(content=f.read())
+        image_context = vision.ImageContext(language_hints=language_hints)
+        response = client.document_text_detection(
+            image=image,
+            image_context=image_context,
+        )
+        if response.error.message:
+            raise RuntimeError(f"Google Vision OCR failed: {response.error.message}")
+
+        annotation = getattr(response, "full_text_annotation", None)
+        pages = list(getattr(annotation, "pages", []) or [])
+        for fallback_page_no, page in enumerate(pages, start=1):
+            blocks = _vision_page_blocks(page)
+            save_ocr_page(pdf_path, fallback_page_no, blocks, config)
+
+    print(f"[OCR] Completed with Google Vision AI: {pdf_path}")
+
+
 def ocr_pdf_with_azure_document_intelligence(pdf_path: str, config: OCRConfig) -> None:
     _require_azure_document_intelligence()
 
@@ -378,6 +550,9 @@ def ocr_pdf(pdf_path: str, config: OCRConfig, reader: Optional[Any]):
 
     if config.backend == "documentai":
         ocr_pdf_with_document_ai(pdf_path, config)
+        return
+    if config.backend == "google_vision":
+        ocr_pdf_with_google_vision(pdf_path, config)
         return
     if config.backend == "azure":
         ocr_pdf_with_azure_document_intelligence(pdf_path, config)
