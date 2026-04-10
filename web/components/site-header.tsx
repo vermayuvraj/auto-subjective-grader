@@ -8,7 +8,7 @@ import { SVGProps, useEffect, useState } from "react";
 const navItems = [
   { href: "/", label: "Home" },
   { href: "/evaluate", label: "Evaluate" },
-  { href: "/documentation", label: "Documentation" },
+  { href: "/documentation", label: "Documentation", openInNewTab: true },
   { href: "/team", label: "Team" },
 ];
 
@@ -66,6 +66,8 @@ export function SiteHeader() {
               key={item.href}
               href={item.href}
               className={`site-nav__link${pathname === item.href ? " is-active" : ""}`}
+              target={item.openInNewTab ? "_blank" : undefined}
+              rel={item.openInNewTab ? "noreferrer" : undefined}
             >
               {item.label}
             </Link>

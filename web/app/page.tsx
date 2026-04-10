@@ -76,7 +76,12 @@ export default function HomePage() {
               <Link href="/evaluate" className="button-primary">
                 Start Evaluation
               </Link>
-              <Link href="/documentation" className="button-secondary">
+              <Link
+                href="/documentation"
+                className="button-secondary"
+                target="_blank"
+                rel="noreferrer"
+              >
                 Read Documentation
               </Link>
             </div>

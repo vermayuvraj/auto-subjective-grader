@@ -1964,6 +1964,150 @@ tbody tr:hover {
   border: 1px solid rgba(89, 118, 173, 0.1);
 }
 
+.documentation-report-page {
+  max-width: 1100px;
+}
+
+.documentation-report-header {
+  margin-bottom: 26px;
+}
+
+.documentation-report {
+  padding: 34px;
+  border-radius: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-soft);
+}
+
+.documentation-report > :first-child {
+  margin-top: 0;
+}
+
+.documentation-report :where(h1, h2, h3, h4) {
+  color: var(--text);
+  line-height: 1.15;
+}
+
+.documentation-report h1 {
+  margin: 0 0 1.2rem;
+  font-size: clamp(2rem, 3.4vw, 3rem);
+}
+
+.documentation-report h2 {
+  margin: 2.6rem 0 1rem;
+  font-size: clamp(1.55rem, 2.2vw, 2rem);
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(89, 118, 173, 0.12);
+}
+
+.documentation-report h3 {
+  margin: 1.9rem 0 0.7rem;
+  font-size: 1.25rem;
+}
+
+.documentation-report h4 {
+  margin: 1.4rem 0 0.55rem;
+  font-size: 1.05rem;
+}
+
+.documentation-report p,
+.documentation-report li {
+  color: var(--muted);
+  line-height: 1.9;
+  font-size: 1rem;
+}
+
+.documentation-report ul,
+.documentation-report ol {
+  margin: 0.7rem 0 1.2rem;
+  padding-left: 1.4rem;
+}
+
+.documentation-report li + li {
+  margin-top: 0.35rem;
+}
+
+.documentation-report a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.16rem;
+}
+
+.documentation-report hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid rgba(89, 118, 173, 0.12);
+}
+
+.documentation-report blockquote {
+  margin: 1.4rem 0;
+  padding: 1rem 1.1rem;
+  border-left: 4px solid var(--primary);
+  border-radius: 0 18px 18px 0;
+  background: rgba(22, 155, 255, 0.06);
+}
+
+.documentation-report pre {
+  margin: 1.2rem 0;
+  padding: 18px 20px;
+  overflow-x: auto;
+  border-radius: 22px;
+  border: 1px solid rgba(89, 118, 173, 0.12);
+  background: #f4f8ff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.documentation-report code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.92rem;
+}
+
+.documentation-report :not(pre) > code {
+  padding: 0.18rem 0.42rem;
+  border-radius: 10px;
+  background: rgba(22, 155, 255, 0.1);
+  color: #1d5a9b;
+}
+
+.documentation-report pre code {
+  color: #233a62;
+  background: transparent;
+  padding: 0;
+}
+
+.documentation-report table {
+  width: 100%;
+  margin: 1.2rem 0;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  border: 1px solid rgba(89, 118, 173, 0.1);
+  border-radius: 22px;
+}
+
+.documentation-report thead,
+.documentation-report tbody {
+  width: 100%;
+}
+
+.documentation-report th,
+.documentation-report td {
+  min-width: 180px;
+}
+
+.documentation-report th {
+  background: rgba(244, 248, 255, 0.95);
+}
+
+.documentation-report img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 20px;
+  box-shadow: var(--shadow-soft);
+}
+
 .team-minimal-page {
   max-width: 1240px;
   margin: 0 auto;
@@ -2011,6 +2155,7 @@ html[data-theme="dark"] .paper-header,
 html[data-theme="dark"] .paper-section,
 html[data-theme="dark"] .paper-card,
 html[data-theme="dark"] .paper-flow__node,
+html[data-theme="dark"] .documentation-report,
 html[data-theme="dark"] .team-minimal-header,
 html[data-theme="dark"] .team-card--minimal,
 html[data-theme="dark"] .metric-card,
@@ -2050,6 +2195,30 @@ html[data-theme="dark"] th {
 
 html[data-theme="dark"] td {
   color: #b5c5e1;
+}
+
+html[data-theme="dark"] .documentation-report h2,
+html[data-theme="dark"] .documentation-report hr {
+  border-color: rgba(145, 167, 211, 0.14);
+}
+
+html[data-theme="dark"] .documentation-report pre,
+html[data-theme="dark"] .documentation-report th {
+  background: rgba(9, 16, 29, 0.98);
+  border-color: rgba(145, 167, 211, 0.14);
+}
+
+html[data-theme="dark"] .documentation-report pre code {
+  color: #dbe8ff;
+}
+
+html[data-theme="dark"] .documentation-report :not(pre) > code {
+  background: rgba(17, 29, 49, 0.94);
+  color: #dbe8ff;
+}
+
+html[data-theme="dark"] .documentation-report blockquote {
+  background: rgba(17, 29, 49, 0.94);
 }
 
 @media (max-width: 1180px) {
@@ -2197,6 +2366,12 @@ html[data-theme="dark"] td {
   .site-nav__link {
     width: 100%;
     text-align: center;
+  }
+
+  .documentation-report,
+  .paper-header {
+    padding: 24px 20px;
+    border-radius: 26px;
   }
 
   th,
