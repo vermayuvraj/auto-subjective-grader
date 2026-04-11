@@ -4,7 +4,7 @@ import { SiteHeader } from "../components/site-header";
 
 export const metadata: Metadata = {
   title: "Automated Subjective Grader",
-  description: "Professional web interface for the multimodal subjective answer sheet evaluation platform.",
+  description: "Web interface for the multimodal subjective answer sheet evaluation platform.",
 };
 
 export default function RootLayout({
