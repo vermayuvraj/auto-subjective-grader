@@ -293,7 +293,7 @@ export default function EvaluatePage() {
   const [runHistory, setRunHistory] = useState<RunSummary[]>([]);
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [isHostedDeployment, setIsHostedDeployment] = useState(false);
-  const hostedUsesSynchronousRuns = isHostedDeployment;
+  const hostedUsesSynchronousRuns = false;
 
   const requiresAzure = useMemo(() => ocrBackend === "azure", [ocrBackend]);
   const needsManualAzureSecrets = requiresAzure && !runtimeConfig?.azure_configured;
@@ -380,11 +380,7 @@ export default function EvaluatePage() {
             setRunHistory(historyData);
           }
         } catch (pollError) {
-          setError(
-            pollError instanceof Error
-              ? pollError.message
-              : "Unable to refresh live job progress."
-          );
+          console.error("Unable to refresh live job progress.", pollError);
         }
       }
 
@@ -394,7 +390,7 @@ export default function EvaluatePage() {
     return () => window.clearTimeout(timer);
   }, [currentRun, hostedUsesSynchronousRuns]);
 
-  async function refreshHistory() {
+  async function refreshHistory(options?: { silent?: boolean }) {
     setIsHistoryLoading(true);
     try {
       const response = await fetch(`${BROWSER_API_BASE_URL}/jobs`, { cache: "no-store" });
@@ -404,11 +400,13 @@ export default function EvaluatePage() {
       const data = (await readApiPayload<RunSummary[]>(response)) as RunSummary[];
       setRunHistory(data);
     } catch (historyError) {
-      setError(
-        historyError instanceof Error
-          ? historyError.message
-          : "Unable to refresh recent runs right now."
-      );
+      if (!options?.silent) {
+        setError(
+          historyError instanceof Error
+            ? historyError.message
+            : "Unable to refresh recent runs right now."
+        );
+      }
     } finally {
       setIsHistoryLoading(false);
     }
@@ -509,7 +507,7 @@ export default function EvaluatePage() {
       }
 
       setCurrentRun(data as RunMeta);
-      await refreshHistory();
+      await refreshHistory({ silent: true });
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -630,9 +628,10 @@ export default function EvaluatePage() {
 
               {isHostedDeployment ? (
                 <div className="status-card">
-                  <strong>Hosted mode keeps the production backend path stable.</strong>
-                  The deployed interface runs through the production backend, but OCR and evaluation
-                  mode can still be changed directly from this screen.
+                  <strong>Hosted mode now creates a background run immediately.</strong>
+                  The deployed interface sends the files to the production backend, stores a run
+                  ID, and updates the workflow live without making the browser wait on one long
+                  response.
                 </div>
               ) : (
                 <div className="status-card">

@@ -129,7 +129,7 @@ def _persist_job_meta(run_id: str, meta: Dict[str, Any], sync_remote: bool = Fal
     with JOB_CACHE_LOCK:
         JOB_CACHE[run_id] = meta
     _write_json_atomic(_run_meta_path(run_id), meta)
-    if sync_remote:
+    if sync_remote or RUN_ARTIFACT_STORE.enabled:
         RUN_ARTIFACT_STORE.save_run_meta(run_id, meta)
 
 
