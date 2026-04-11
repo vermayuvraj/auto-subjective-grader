@@ -49,16 +49,10 @@
     .hero p { max-width: 900px; margin: 0; color: var(--muted); line-height: 1.85; font-size: 1.04rem; }
     .hero-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
     .hero-meta span { padding: 10px 14px; border-radius: 999px; background: rgba(19, 35, 63, 0.06); color: var(--text); font-weight: 700; font-size: 0.92rem; }
-    .summary-grid { display: grid; grid-template-columns: 320px 1fr; gap: 24px; margin-top: 28px; }
-    .toc, .flow-panel, .report-shell { border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 30px; background: var(--panel); box-shadow: var(--soft-shadow); }
-    .toc { position: sticky; top: 24px; align-self: start; padding: 26px 24px; }
-    .toc h2, .flow-panel h2 { margin: 0 0 14px; font-size: 1.2rem; }
-    .toc p, .flow-panel p.section-copy { margin: 0 0 14px; color: var(--muted); line-height: 1.75; font-size: 0.96rem; }
-    .toc ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
-    .toc li a { display: block; padding: 8px 10px; border-radius: 14px; color: var(--muted); text-decoration: none; transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease; }
-    .toc li a:hover { background: rgba(53, 121, 246, 0.08); color: var(--text); transform: translateX(2px); }
-    .toc li.level-3 a { padding-left: 22px; font-size: 0.95rem; }
-    .toc li.level-4 a { padding-left: 34px; font-size: 0.92rem; }
+    .summary-grid { display: grid; grid-template-columns: 1fr; gap: 24px; margin-top: 28px; }
+    .flow-panel, .report-shell { border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 30px; background: var(--panel); box-shadow: var(--soft-shadow); }
+    .flow-panel h2 { margin: 0 0 14px; font-size: 1.2rem; }
+    .flow-panel p.section-copy { margin: 0 0 14px; color: var(--muted); line-height: 1.75; font-size: 0.96rem; }
     .flow-panel { padding: 28px; margin-bottom: 24px; }
     .flow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
     .flow-card { padding: 18px; border-radius: 22px; background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(243,248,255,0.95)); border: 1px solid var(--line); }
@@ -84,8 +78,8 @@
     .report-shell hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
     .mermaid { margin: 1.6rem 0; padding: 18px; overflow-x: auto; border-radius: 24px; border: 1px solid var(--line); background: #fbfdff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6); }
     .edit-note { margin-top: 26px; padding: 18px 20px; border-radius: 22px; background: rgba(123, 97, 255, 0.08); color: var(--text); border: 1px solid rgba(123, 97, 255, 0.12); font-size: 0.95rem; line-height: 1.8; }
-    @media (max-width: 980px) { .summary-grid { grid-template-columns: 1fr; } .toc { position: static; } .flow-grid { grid-template-columns: 1fr; } }
-    @media (max-width: 640px) { .page { padding: 18px 12px 48px; } .hero, .flow-panel, .toc, .report-shell { padding: 22px 18px; border-radius: 24px; } .hero h1 { font-size: 2rem; } .report-shell th, .report-shell td { min-width: 140px; padding: 12px; } }
+    @media (max-width: 980px) { .summary-grid { grid-template-columns: 1fr; } .flow-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 640px) { .page { padding: 18px 12px 48px; } .hero, .flow-panel, .report-shell { padding: 22px 18px; border-radius: 24px; } .hero h1 { font-size: 2rem; } .report-shell th, .report-shell td { min-width: 140px; padding: 12px; } }
   </style>
 </head>
 <body>
@@ -107,139 +101,6 @@
     </section>
 
     <section class="summary-grid">
-      <aside class="toc">
-        <h2>Table of Contents</h2>
-        <p>Jump directly to any section of the report.</p>
-        <ul>
-          <li class="level-2"><a href="#1-project-overview">1. Project Overview</a></li>
-<li class="level-3"><a href="#1-1-title">1.1 Title</a></li>
-<li class="level-3"><a href="#1-2-problem-statement">1.2 Problem Statement</a></li>
-<li class="level-3"><a href="#1-3-project-goal">1.3 Project Goal</a></li>
-<li class="level-3"><a href="#1-4-why-this-project-matters">1.4 Why This Project Matters</a></li>
-<li class="level-2"><a href="#2-objectives">2. Objectives</a></li>
-<li class="level-2"><a href="#3-scope-of-the-project">3. Scope of the Project</a></li>
-<li class="level-3"><a href="#3-1-in-scope">3.1 In Scope</a></li>
-<li class="level-3"><a href="#3-2-current-assumptions">3.2 Current Assumptions</a></li>
-<li class="level-3"><a href="#3-3-current-limitations">3.3 Current Limitations</a></li>
-<li class="level-2"><a href="#4-end-users">4. End Users</a></li>
-<li class="level-2"><a href="#5-high-level-system-description">5. High-Level System Description</a></li>
-<li class="level-2"><a href="#6-overall-architecture">6. Overall Architecture</a></li>
-<li class="level-2"><a href="#7-repository-structure">7. Repository Structure</a></li>
-<li class="level-3"><a href="#7-1-purpose-of-major-folders">7.1 Purpose of Major Folders</a></li>
-<li class="level-4"><a href="#src">src/</a></li>
-<li class="level-4"><a href="#backend-api">backend_api/</a></li>
-<li class="level-4"><a href="#web">web/</a></li>
-<li class="level-4"><a href="#data">data/</a></li>
-<li class="level-4"><a href="#results">results/</a></li>
-<li class="level-2"><a href="#8-input-design">8. Input Design</a></li>
-<li class="level-3"><a href="#8-1-ideal-answer-sheet">8.1 Ideal Answer Sheet</a></li>
-<li class="level-3"><a href="#8-2-rubric-json">8.2 Rubric JSON</a></li>
-<li class="level-3"><a href="#8-3-student-answer-sheets">8.3 Student Answer Sheets</a></li>
-<li class="level-2"><a href="#9-rubric-format">9. Rubric Format</a></li>
-<li class="level-3"><a href="#9-1-meaning-of-rubric-fields">9.1 Meaning of Rubric Fields</a></li>
-<li class="level-2"><a href="#10-end-to-end-workflow">10. End-to-End Workflow</a></li>
-<li class="level-3"><a href="#10-1-workflow-stages">10.1 Workflow Stages</a></li>
-<li class="level-2"><a href="#11-ocr-layer">11. OCR Layer</a></li>
-<li class="level-3"><a href="#11-1-ocr-output-format">11.1 OCR Output Format</a></li>
-<li class="level-3"><a href="#11-2-easyocr-path">11.2 EasyOCR Path</a></li>
-<li class="level-3"><a href="#11-3-google-vision-ai-path">11.3 Google Vision AI Path</a></li>
-<li class="level-3"><a href="#11-4-azure-document-intelligence-path">11.4 Azure Document Intelligence Path</a></li>
-<li class="level-3"><a href="#11-5-document-ai-support">11.5 Document AI Support</a></li>
-<li class="level-2"><a href="#12-diagram-extraction">12. Diagram Extraction</a></li>
-<li class="level-3"><a href="#12-1-why-diagram-extraction-is-needed">12.1 Why Diagram Extraction Is Needed</a></li>
-<li class="level-3"><a href="#12-2-method-used">12.2 Method Used</a></li>
-<li class="level-3"><a href="#12-3-output">12.3 Output</a></li>
-<li class="level-3"><a href="#12-4-advantages">12.4 Advantages</a></li>
-<li class="level-3"><a href="#12-5-limitations">12.5 Limitations</a></li>
-<li class="level-2"><a href="#13-formula-extraction-and-formula-ocr">13. Formula Extraction and Formula OCR</a></li>
-<li class="level-3"><a href="#13-1-purpose">13.1 Purpose</a></li>
-<li class="level-3"><a href="#13-2-processing-steps">13.2 Processing Steps</a></li>
-<li class="level-3"><a href="#13-3-formula-detection-heuristics">13.3 Formula Detection Heuristics</a></li>
-<li class="level-3"><a href="#13-4-formula-output">13.4 Formula Output</a></li>
-<li class="level-3"><a href="#13-5-crop-storage">13.5 Crop Storage</a></li>
-<li class="level-2"><a href="#14-formula-evaluation">14. Formula Evaluation</a></li>
-<li class="level-3"><a href="#14-1-why-symbolic-evaluation-is-important">14.1 Why Symbolic Evaluation Is Important</a></li>
-<li class="level-3"><a href="#14-2-processing-logic">14.2 Processing Logic</a></li>
-<li class="level-3"><a href="#14-3-scoring-strategy">14.3 Scoring Strategy</a></li>
-<li class="level-3"><a href="#14-4-feedback">14.4 Feedback</a></li>
-<li class="level-2"><a href="#15-text-and-diagram-evaluation-with-sbert">15. Text and Diagram Evaluation with SBERT</a></li>
-<li class="level-3"><a href="#15-1-purpose">15.1 Purpose</a></li>
-<li class="level-3"><a href="#15-2-text-evaluation">15.2 Text Evaluation</a></li>
-<li class="level-3"><a href="#15-3-text-similarity-mapping">15.3 Text Similarity Mapping</a></li>
-<li class="level-3"><a href="#15-4-diagram-evaluation">15.4 Diagram Evaluation</a></li>
-<li class="level-3"><a href="#15-5-formula-evaluation">15.5 Formula Evaluation</a></li>
-<li class="level-3"><a href="#15-6-weight-normalization">15.6 Weight Normalization</a></li>
-<li class="level-3"><a href="#15-7-missing-modality-handling">15.7 Missing Modality Handling</a></li>
-<li class="level-3"><a href="#15-8-question-result">15.8 Question Result</a></li>
-<li class="level-3"><a href="#15-9-student-result">15.9 Student Result</a></li>
-<li class="level-2"><a href="#16-gemini-llm-evaluation-path">16. Gemini LLM Evaluation Path</a></li>
-<li class="level-3"><a href="#16-1-purpose">16.1 Purpose</a></li>
-<li class="level-3"><a href="#16-2-environment-requirement">16.2 Environment Requirement</a></li>
-<li class="level-3"><a href="#16-3-model-used">16.3 Model Used</a></li>
-<li class="level-3"><a href="#16-4-prompt-strategy">16.4 Prompt Strategy</a></li>
-<li class="level-3"><a href="#16-5-safety-handling">16.5 Safety Handling</a></li>
-<li class="level-3"><a href="#16-6-current-role-of-gemini-path">16.6 Current Role of Gemini Path</a></li>
-<li class="level-2"><a href="#17-pipeline-orchestration">17. Pipeline Orchestration</a></li>
-<li class="level-3"><a href="#17-1-main-responsibility">17.1 Main Responsibility</a></li>
-<li class="level-3"><a href="#17-2-engine-dependent-flow">17.2 Engine-Dependent Flow</a></li>
-<li class="level-3"><a href="#17-3-progress-tracking">17.3 Progress Tracking</a></li>
-<li class="level-2"><a href="#18-report-generation">18. Report Generation</a></li>
-<li class="level-3"><a href="#18-1-purpose">18.1 Purpose</a></li>
-<li class="level-3"><a href="#18-2-report-contents">18.2 Report Contents</a></li>
-<li class="level-3"><a href="#18-3-pdf-tool-used">18.3 PDF Tool Used</a></li>
-<li class="level-2"><a href="#19-fastapi-backend">19. FastAPI Backend</a></li>
-<li class="level-3"><a href="#19-1-role-of-backend">19.1 Role of Backend</a></li>
-<li class="level-3"><a href="#19-2-core-backend-endpoints">19.2 Core Backend Endpoints</a></li>
-<li class="level-4"><a href="#health-endpoints">Health Endpoints</a></li>
-<li class="level-4"><a href="#informational-endpoints">Informational Endpoints</a></li>
-<li class="level-4"><a href="#job-and-run-endpoints">Job and Run Endpoints</a></li>
-<li class="level-3"><a href="#19-3-job-modes">19.3 Job Modes</a></li>
-<li class="level-3"><a href="#19-4-job-metadata">19.4 Job Metadata</a></li>
-<li class="level-3"><a href="#19-5-backend-settings">19.5 Backend Settings</a></li>
-<li class="level-2"><a href="#20-streamlit-interface">20. Streamlit Interface</a></li>
-<li class="level-3"><a href="#20-1-purpose">20.1 Purpose</a></li>
-<li class="level-3"><a href="#20-2-main-tabs-and-sections">20.2 Main Tabs and Sections</a></li>
-<li class="level-3"><a href="#20-3-role-in-the-project">20.3 Role in the Project</a></li>
-<li class="level-2"><a href="#21-next-js-web-interface">21. Next.js Web Interface</a></li>
-<li class="level-3"><a href="#21-1-frontend-stack">21.1 Frontend Stack</a></li>
-<li class="level-3"><a href="#21-2-current-main-web-sections">21.2 Current Main Web Sections</a></li>
-<li class="level-3"><a href="#21-3-web-evaluation-page">21.3 Web Evaluation Page</a></li>
-<li class="level-3"><a href="#21-4-documentation-page">21.4 Documentation Page</a></li>
-<li class="level-3"><a href="#21-5-api-base-handling">21.5 API Base Handling</a></li>
-<li class="level-2"><a href="#22-results-and-output-directories">22. Results and Output Directories</a></li>
-<li class="level-3"><a href="#22-1-ocr-outputs">22.1 OCR Outputs</a></li>
-<li class="level-3"><a href="#22-2-diagram-outputs">22.2 Diagram Outputs</a></li>
-<li class="level-3"><a href="#22-3-formula-outputs">22.3 Formula Outputs</a></li>
-<li class="level-3"><a href="#22-4-formula-crop-outputs">22.4 Formula Crop Outputs</a></li>
-<li class="level-3"><a href="#22-5-evaluation-outputs">22.5 Evaluation Outputs</a></li>
-<li class="level-3"><a href="#22-6-report-outputs">22.6 Report Outputs</a></li>
-<li class="level-2"><a href="#23-deployment-architecture">23. Deployment Architecture</a></li>
-<li class="level-3"><a href="#23-1-current-production-direction">23.1 Current Production Direction</a></li>
-<li class="level-3"><a href="#23-2-why-this-split-is-used">23.2 Why This Split Is Used</a></li>
-<li class="level-3"><a href="#23-3-docker-backend">23.3 Docker Backend</a></li>
-<li class="level-3"><a href="#23-4-backend-startup-script">23.4 Backend Startup Script</a></li>
-<li class="level-3"><a href="#23-5-github-actions">23.5 GitHub Actions</a></li>
-<li class="level-2"><a href="#24-environment-variables">24. Environment Variables</a></li>
-<li class="level-3"><a href="#24-1-common-backend-variables">24.1 Common Backend Variables</a></li>
-<li class="level-3"><a href="#24-2-google-vision-requirements">24.2 Google Vision Requirements</a></li>
-<li class="level-3"><a href="#24-3-frontend-variables">24.3 Frontend Variables</a></li>
-<li class="level-2"><a href="#25-local-execution-commands">25. Local Execution Commands</a></li>
-<li class="level-3"><a href="#25-1-streamlit">25.1 Streamlit</a></li>
-<li class="level-3"><a href="#25-2-fastapi-backend">25.2 FastAPI Backend</a></li>
-<li class="level-3"><a href="#25-3-next-js-frontend">25.3 Next.js Frontend</a></li>
-<li class="level-3"><a href="#25-4-helper-scripts">25.4 Helper Scripts</a></li>
-<li class="level-2"><a href="#26-tools-and-libraries-used">26. Tools and Libraries Used</a></li>
-<li class="level-2"><a href="#27-sample-data-flow">27. Sample Data Flow</a></li>
-<li class="level-2"><a href="#28-current-strengths-of-the-project">28. Current Strengths of the Project</a></li>
-<li class="level-2"><a href="#29-current-challenges">29. Current Challenges</a></li>
-<li class="level-2"><a href="#30-future-enhancements">30. Future Enhancements</a></li>
-<li class="level-2"><a href="#31-conclusion">31. Conclusion</a></li>
-<li class="level-2"><a href="#32-quick-reference">32. Quick Reference</a></li>
-<li class="level-3"><a href="#core-files">Core Files</a></li>
-<li class="level-3"><a href="#key-config-files">Key Config Files</a></li>
-<li class="level-2"><a href="#33-note-for-future-report-conversion">33. Note for Future Report Conversion</a></li>
-        </ul>
-      </aside>
 
       <div>
         <section class="flow-panel">
