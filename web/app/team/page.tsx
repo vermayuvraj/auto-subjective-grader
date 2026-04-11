@@ -34,7 +34,7 @@ function SocialIcon({
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path
           fill="currentColor"
-          d="M6.94 8.5H3.56V20h3.38V8.5ZM5.25 3A2.02 2.02 0 1 0 5.3 7.03 2.02 2.02 0 0 0 5.25 3Zm6.06 5.5H8.06V20h3.25v-6.03c0-1.59.3-3.14 2.27-3.14 1.94 0 1.97 1.82 1.97 3.25V20h3.25v-6.6c0-3.23-.7-5.72-4.47-5.72-1.81 0-3.02 1-3.52 1.95h-.05V8.5Z"
+          d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"
         />
       </svg>
     );
@@ -56,7 +56,7 @@ function SocialIcon({
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path
           fill="currentColor"
-          d="M12 .5a12 12 0 0 0-3.8 23.38c.6.1.82-.26.82-.58v-2.03c-3.34.73-4.04-1.41-4.04-1.41-.55-1.38-1.33-1.74-1.33-1.74-1.08-.74.08-.72.08-.72 1.2.08 1.83 1.21 1.83 1.21 1.05 1.8 2.77 1.28 3.45.98.11-.75.42-1.28.75-1.58-2.66-.3-5.46-1.31-5.46-5.84 0-1.29.47-2.35 1.22-3.18-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.21a11.7 11.7 0 0 1 6 0c2.3-1.53 3.3-1.21 3.3-1.21.65 1.65.24 2.88.12 3.18.76.83 1.22 1.89 1.22 3.18 0 4.54-2.8 5.53-5.47 5.83.43.37.81 1.08.81 2.18v3.23c0 .32.22.69.83.58A12 12 0 0 0 12 .5Z"
+          d="M12 .5C5.373.5 0 5.873 0 12.5c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.508 11.508 0 0 1 12 6.303c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 22.297 24 17.8 24 12.5 24 5.873 18.627.5 12 .5z"
         />
       </svg>
     );
@@ -75,155 +75,94 @@ function SocialIcon({
 export default async function TeamPage() {
   const fetchedTeam = await fetchJson<TeamMember[]>("/api/team", fallbackTeam);
   const team = mergeTeamMembers(fetchedTeam, fallbackTeam);
-  const featuredMember = team.find((member) => member.name === "Yuvraj Verma");
+  const mentor =
+    team.find((member) => member.role.toLowerCase().includes("mentor")) ?? team[0] ?? null;
+  const members = mentor ? team.filter((member) => member.name !== mentor.name) : team;
 
   return (
-    <section className="team-minimal-page">
-      <header className="team-minimal-header">
-        <div className="team-minimal-header__copy">
-          <p className="team-minimal-header__eyebrow">Project Team</p>
-          <h1>People Behind The System</h1>
-          <p>
-            Meet the mentor and builders shaping the grading platform, from research direction to
-            AI workflow design and product delivery.
-          </p>
-        </div>
-        {featuredMember ? (
-          <aside className="team-feature-panel">
-            <span className="team-feature-panel__eyebrow">Featured Builder</span>
-            <div className="team-feature-panel__main">
-              <img src={featuredMember.photo} alt={featuredMember.name} />
-              <div className="team-feature-panel__content">
-                <h2>{featuredMember.name}</h2>
-                <p className="team-feature-panel__meta">
-                  {featuredMember.role} · {featuredMember.branch}
-                </p>
-                {featuredMember.summary ? <p>{featuredMember.summary}</p> : null}
+    <section className="team-showcase-page">
+      <header className="team-showcase-header">
+        <p className="team-showcase-meta">Project Team</p>
+        <h1>People Behind the System</h1>
+        <p className="team-showcase-sub">
+          The team building the Automated Subjective Answer Sheet Evaluation System at RECK.
+        </p>
+      </header>
+
+      {mentor ? (
+        <article className="mentor-row">
+          <img className="avatar-lg" src={mentor.photo} alt={mentor.name} />
+          <div className="mentor-text">
+            <div className="mentor-tag">{mentor.role}</div>
+            <div className="mentor-name">{mentor.name}</div>
+            <div className="mentor-dept">{mentor.branch}</div>
+          </div>
+          <div className="mentor-links">
+            <a className="team-button team-button--filled" href={mentor.linkedin} target="_blank" rel="noreferrer">
+              <SocialIcon kind="linkedin" />
+              LinkedIn
+            </a>
+            <a className="team-button" href={mentor.email}>
+              <SocialIcon kind="email" />
+              Email
+            </a>
+          </div>
+        </article>
+      ) : null}
+
+      <div className="section-label">Student Members</div>
+
+      <div className="member-list">
+        {members.map((member, index) => (
+          <article
+            key={member.name}
+            className={`member-row member-row--accent-${(index % 3) + 1}`}
+          >
+            <img className="avatar-md" src={member.photo} alt={member.name} />
+            <div className="member-info">
+              <div className="member-name">{member.name}</div>
+              <div className="member-meta">
+                <span className="role-dot" />
+                <span>{member.role}</span>
+                <span className="sep">·</span>
+                <span>{member.branch}</span>
               </div>
             </div>
-            <div className="team-card__actions team-card__actions--feature">
+            <div className="member-actions">
               <a
-                className="link-chip link-chip--icon"
-                href={featuredMember.linkedin}
+                className="team-button team-button--filled"
+                href={member.linkedin}
                 target="_blank"
                 rel="noreferrer"
               >
                 <SocialIcon kind="linkedin" />
                 LinkedIn
               </a>
-              <a className="link-chip link-chip--icon" href={featuredMember.email}>
-                <SocialIcon kind="email" />
-                Email
-              </a>
-              {featuredMember.github ? (
-                <a
-                  className="button-secondary team-action-button"
-                  href={featuredMember.github}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+              {member.github ? (
+                <a className="team-button" href={member.github} target="_blank" rel="noreferrer">
                   <SocialIcon kind="github" />
                   GitHub
                 </a>
               ) : null}
-              {featuredMember.website ? (
-                <a
-                  className="button-primary team-action-button"
-                  href={featuredMember.website}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+              {member.website ? (
+                <a className="team-button" href={member.website} target="_blank" rel="noreferrer">
                   <SocialIcon kind="website" />
                   Website
                 </a>
               ) : null}
-            </div>
-          </aside>
-        ) : (
-          <div className="team-minimal-header__stats">
-            <article className="team-minimal-stat">
-              <span>Core contributors</span>
-              <strong>{team.length}</strong>
-            </article>
-            <article className="team-minimal-stat">
-              <span>Academic leadership</span>
-              <strong>1 mentor-led team</strong>
-            </article>
-            <article className="team-minimal-stat">
-              <span>Primary focus</span>
-              <strong>AI, evaluation, and research</strong>
-            </article>
-            <article className="team-minimal-stat">
-              <span>Featured builder</span>
-              <strong>Yuvraj Verma</strong>
-            </article>
-          </div>
-        )}
-      </header>
-
-      <div className="team-grid team-grid--minimal">
-        {team.map((member, index) => (
-          <article
-            key={member.name}
-            className={`team-card team-card--accent-${(index % 4) + 1} team-card--minimal${
-              member.name === "Yuvraj Verma" ? " team-card--featured" : ""
-            }`}
-          >
-            <div className="team-card__media team-card__media--minimal">
-              <img src={member.photo} alt={member.name} />
-              <span className="team-role-badge">{member.role}</span>
-            </div>
-            <div className="team-card__body">
-              <div className="team-card__identity">
-                <h3>{member.name}</h3>
-                <div className="team-branch">{member.branch}</div>
-              </div>
-              {member.summary ? <p className="team-card__summary">{member.summary}</p> : null}
-              <div className="link-row">
-                <a
-                  className="link-chip link-chip--icon"
-                  href={member.linkedin}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <SocialIcon kind="linkedin" />
-                  LinkedIn
-                </a>
-                <a className="link-chip link-chip--icon" href={member.email}>
-                  <SocialIcon kind="email" />
-                  Email
-                </a>
-              </div>
-              {member.name === "Yuvraj Verma" ? (
-                <div className="team-card__actions">
-                  {member.github ? (
-                    <a
-                      className="button-secondary team-action-button"
-                      href={member.github}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <SocialIcon kind="github" />
-                      GitHub
-                    </a>
-                  ) : null}
-                  {member.website ? (
-                    <a
-                      className="button-primary team-action-button"
-                      href={member.website}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <SocialIcon kind="website" />
-                      Website
-                    </a>
-                  ) : null}
-                </div>
-              ) : null}
+              <a className="team-button" href={member.email}>
+                <SocialIcon kind="email" />
+                Email
+              </a>
             </div>
           </article>
         ))}
       </div>
+
+      <footer className="team-showcase-footer">
+        <span>Built at RECK · Electronics Engineering · 2025-26</span>
+        <span>Ai Grader · Automated Evaluation System</span>
+      </footer>
     </section>
   );
 }
