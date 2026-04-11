@@ -93,10 +93,11 @@ textarea {
 .site-header__inner {
   max-width: 1240px;
   margin: 0 auto;
-  padding: 16px 24px;
+  min-height: 1cm;
+  padding: 4px 24px;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 18px;
+  gap: 16px;
   align-items: center;
 }
 
@@ -107,7 +108,7 @@ textarea {
 }
 
 .brand-mark__logo {
-  width: clamp(168px, 19vw, 286px);
+  width: clamp(156px, 16vw, 236px);
   height: auto;
 }
 
@@ -119,11 +120,12 @@ textarea {
 }
 
 .site-nav__link {
-  padding: 10px 15px;
+  padding: 8px 13px;
   border-radius: 999px;
   border: 1px solid transparent;
   color: var(--muted);
   font-weight: 700;
+  font-size: 0.98rem;
   transition:
     color 0.2s ease,
     background 0.2s ease,
@@ -147,7 +149,7 @@ textarea {
 .site-header__actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   justify-content: flex-end;
 }
 
@@ -157,13 +159,17 @@ textarea {
   gap: 8px;
   border: 1px solid rgba(109, 124, 252, 0.14);
   border-radius: 999px;
-  padding: 12px 16px;
+  padding: 9px 14px;
   background: rgba(255, 255, 255, 0.9);
   color: var(--text);
   cursor: pointer;
   font-weight: 700;
   box-shadow: var(--shadow-soft);
   transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.site-header__cta--compact {
+  padding: 10px 16px;
 }
 
 .theme-toggle:hover {
@@ -2115,8 +2121,16 @@ tbody tr:hover {
 }
 
 .team-minimal-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 18px;
   padding: 28px;
   border-radius: 30px;
+  background:
+    linear-gradient(135deg, rgba(233, 245, 255, 0.96), rgba(246, 241, 255, 0.96), rgba(255, 245, 237, 0.94)),
+    rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.84);
+  box-shadow: var(--shadow-soft);
 }
 
 .team-minimal-header h1 {
@@ -2131,6 +2145,35 @@ tbody tr:hover {
   max-width: 720px;
 }
 
+.team-minimal-header__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-self: start;
+}
+
+.team-minimal-stat {
+  padding: 18px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  box-shadow: var(--shadow-soft);
+}
+
+.team-minimal-stat span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.team-minimal-stat strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--text);
+  line-height: 1.45;
+  font-size: 1.04rem;
+}
+
 .team-grid--minimal {
   margin-top: 24px;
 }
@@ -2138,11 +2181,45 @@ tbody tr:hover {
 .team-card--minimal {
   display: grid;
   gap: 18px;
+  align-content: start;
+  position: relative;
+  overflow: hidden;
 }
 
 .team-card--minimal img {
   width: 82px;
   height: 82px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+}
+
+.team-card__media--minimal {
+  margin-bottom: 0;
+}
+
+.team-card__body .team-card__summary {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.team-card--featured {
+  border-color: rgba(22, 155, 255, 0.18);
+  box-shadow: 0 22px 36px rgba(72, 96, 150, 0.18);
+}
+
+.team-card__actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.team-action-button {
+  min-width: 132px;
+  padding: 10px 16px;
+}
+
+.team-action-button.button-secondary {
+  border: 1px solid rgba(22, 155, 255, 0.14);
 }
 
 html[data-theme="dark"] .site-header,
@@ -2157,6 +2234,7 @@ html[data-theme="dark"] .paper-card,
 html[data-theme="dark"] .paper-flow__node,
 html[data-theme="dark"] .documentation-report,
 html[data-theme="dark"] .team-minimal-header,
+html[data-theme="dark"] .team-minimal-stat,
 html[data-theme="dark"] .team-card--minimal,
 html[data-theme="dark"] .metric-card,
 html[data-theme="dark"] .section-shell,
@@ -2271,6 +2349,7 @@ html[data-theme="dark"] .documentation-report blockquote {
   }
 
   .evaluate-layout,
+  .team-minimal-header,
   .snapshot-grid,
   .process-grid,
   .home-overview__layout,
@@ -2352,7 +2431,7 @@ html[data-theme="dark"] .documentation-report blockquote {
 
 @media (max-width: 560px) {
   .site-header__inner {
-    padding: 14px 16px;
+    padding: 8px 16px;
   }
 
   .brand-mark {
@@ -2372,6 +2451,10 @@ html[data-theme="dark"] .documentation-report blockquote {
   .paper-header {
     padding: 24px 20px;
     border-radius: 26px;
+  }
+
+  .team-minimal-header__stats {
+    grid-template-columns: 1fr;
   }
 
   th,
