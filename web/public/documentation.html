@@ -3,1255 +3,1756 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Automated Subjective Answer Sheet Evaluation System | Project Report</title>
-  <meta name="description" content="Complete project report for the Automated Subjective Answer Sheet Evaluation System." />
+  <title>AutoGrade — Automated Subjective Answer Sheet Evaluation System</title>
+  <meta name="description" content="Complete project documentation for the Automated Subjective Answer Sheet Evaluation System — a multimodal AI pipeline for grading descriptive answer sheets." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
+    /* ── Design Tokens ─────────────────────────────────────────────── */
     :root {
-      --bg: #edf4ff;
-      --panel: rgba(255, 255, 255, 0.94);
-      --panel-strong: #ffffff;
-      --text: #13233f;
-      --muted: #4e628a;
-      --line: rgba(95, 122, 175, 0.16);
-      --primary: #3579f6;
-      --secondary: #f69d6f;
-      --accent: #7b61ff;
-      --shadow: 0 24px 70px rgba(41, 72, 128, 0.12);
-      --soft-shadow: 0 16px 36px rgba(41, 72, 128, 0.08);
-      --radius: 28px;
+      --bg-base:      #f5f7fc;
+      --bg-surface:   #ffffff;
+      --bg-card:      #ffffff;
+      --bg-card-hover:#f0f4ff;
+      --bg-code:      #f3f6fb;
+      --border:       rgba(59,89,152,0.13);
+      --border-glow:  rgba(59,89,152,0.32);
+      --primary:      #2563eb;
+      --primary-dim:  rgba(37,99,235,0.09);
+      --accent:       #7c3aed;
+      --accent-dim:   rgba(124,58,237,0.09);
+      --green:        #059669;
+      --orange:       #ea580c;
+      --pink:         #db2777;
+      --yellow:       #d97706;
+      --text:         #0f172a;
+      --text-muted:   #475569;
+      --text-faint:   #94a3b8;
+      --radius-sm:    10px;
+      --radius-md:    16px;
+      --radius-lg:    22px;
+      --radius-xl:    30px;
+      --shadow:       0 24px 64px rgba(15,23,42,0.10);
+      --shadow-sm:    0 6px 20px rgba(15,23,42,0.07);
+      --nav-w:        270px;
+      --transition:   0.22s cubic-bezier(0.4,0,0.2,1);
     }
 
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
+    /* ── Reset + Base ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
     body {
-      margin: 0;
-      font-family: "Segoe UI", Inter, Arial, sans-serif;
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg-base);
       color: var(--text);
-      background:
-        radial-gradient(circle at top left, rgba(93, 171, 255, 0.24), transparent 30%),
-        radial-gradient(circle at top right, rgba(246, 157, 111, 0.22), transparent 28%),
-        linear-gradient(180deg, #f9fbff 0%, var(--bg) 42%, #f7faff 100%);
+      line-height: 1.7;
+      overflow-x: hidden;
     }
-    a { color: var(--primary); }
-    .page { max-width: 1320px; margin: 0 auto; padding: 32px 20px 80px; }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ::selection { background: rgba(37,99,235,0.18); color: var(--primary); }
+
+    /* ── Scrollbar ─────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-base); }
+    ::-webkit-scrollbar-thumb { background: #c7d4ec; border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+    /* ── Navigation Sidebar ────────────────────────────────────────── */
+    .nav-sidebar {
+      position: fixed;
+      top: 0; left: 0;
+      width: var(--nav-w);
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      box-shadow: 2px 0 18px rgba(15,23,42,0.05);
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+      padding-bottom: 40px;
+    }
+    .nav-logo {
+      padding: 22px 22px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo-wordmark {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .logo-wordmark-line {
+      display: flex;
+      align-items: baseline;
+      line-height: 1;
+    }
+    .logo-wordmark-text {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.045em;
+      color: #0f172a;
+      line-height: 1;
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+    .logo-wordmark-dot {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.045em;
+      color: #7c2d8e;
+      line-height: 1;
+    }
+    .logo-sub {
+      font-size: 0.71rem;
+      color: var(--text-faint);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    .nav-search {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-search input {
+      width: 100%;
+      padding: 9px 14px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.84rem;
+      outline: none;
+      transition: border-color var(--transition);
+    }
+    .nav-search input:focus { border-color: var(--primary); }
+    .nav-search input::placeholder { color: var(--text-faint); }
+    .nav-group { padding: 18px 16px 8px; }
+    .nav-group-label {
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 6px;
+    }
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 0.84rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: all var(--transition);
+      cursor: pointer;
+    }
+    .nav-link:hover { background: var(--primary-dim); color: var(--primary); text-decoration: none; }
+    .nav-link.active { background: var(--primary-dim); color: var(--primary); font-weight: 600; }
+    .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-glow); flex-shrink: 0; }
+    .nav-link.active .nav-dot { background: var(--primary); }
+
+    /* ── Main Layout ───────────────────────────────────────────────── */
+    .main-wrapper {
+      margin-left: var(--nav-w);
+      min-height: 100vh;
+    }
+
+    /* ── Hero ───────────────────────────────────────────────────────── */
     .hero {
-      padding: 42px;
-      border: 1px solid rgba(255, 255, 255, 0.9);
-      border-radius: 36px;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 255, 0.94));
-      box-shadow: var(--shadow);
+      padding: 64px 64px 80px;
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+      background: #ffffff;
     }
-    .eyebrow {
-      display: inline-flex; padding: 8px 14px; border-radius: 999px; background: rgba(53, 121, 246, 0.08);
-      color: var(--primary); font-size: 0.82rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 10% -10%, rgba(37,99,235,0.07), transparent),
+        radial-gradient(ellipse 60% 50% at 90% 40%, rgba(124,58,237,0.06), transparent),
+        radial-gradient(ellipse 40% 40% at 50% 110%, rgba(5,150,105,0.04), transparent);
+      pointer-events: none;
     }
-    .hero h1 { margin: 18px 0 14px; font-size: clamp(2.4rem, 4vw, 4.2rem); line-height: 1.02; letter-spacing: -0.04em; }
-    .hero p { max-width: 900px; margin: 0; color: var(--muted); line-height: 1.85; font-size: 1.04rem; }
-    .hero-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
-    .hero-meta span { padding: 10px 14px; border-radius: 999px; background: rgba(19, 35, 63, 0.06); color: var(--text); font-weight: 700; font-size: 0.92rem; }
-    .summary-grid { display: grid; grid-template-columns: 1fr; gap: 24px; margin-top: 28px; }
-    .flow-panel, .report-shell { border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 30px; background: var(--panel); box-shadow: var(--soft-shadow); }
-    .flow-panel h2 { margin: 0 0 14px; font-size: 1.2rem; }
-    .flow-panel p.section-copy { margin: 0 0 14px; color: var(--muted); line-height: 1.75; font-size: 0.96rem; }
-    .flow-panel { padding: 28px; margin-bottom: 24px; }
-    .flow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
-    .flow-card { padding: 18px; border-radius: 22px; background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(243,248,255,0.95)); border: 1px solid var(--line); }
-    .flow-card span { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 12px; background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff; font-weight: 800; margin-bottom: 12px; }
-    .flow-card h3 { margin: 0 0 10px; font-size: 1.02rem; }
-    .flow-card p { margin: 0; color: var(--muted); line-height: 1.7; font-size: 0.95rem; }
-    .report-shell { padding: 34px; }
-    .report-shell h2, .report-shell h3, .report-shell h4 { color: var(--text); line-height: 1.2; }
-    .report-shell h2 { margin: 2.4rem 0 1rem; font-size: clamp(1.5rem, 2vw, 2rem); padding-bottom: 0.55rem; border-bottom: 1px solid var(--line); }
-    .report-shell h3 { margin: 1.65rem 0 0.7rem; font-size: 1.22rem; }
-    .report-shell h4 { margin: 1.2rem 0 0.5rem; font-size: 1.02rem; }
-    .report-shell p, .report-shell li { color: var(--muted); line-height: 1.9; font-size: 1rem; }
-    .report-shell ul, .report-shell ol { margin: 0.8rem 0 1.2rem; padding-left: 1.5rem; }
-    .report-shell li + li { margin-top: 0.34rem; }
-    .report-shell table { width: 100%; border-collapse: collapse; margin: 1.2rem 0; display: block; overflow-x: auto; border-radius: 22px; border: 1px solid var(--line); background: var(--panel-strong); }
-    .report-shell th, .report-shell td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; min-width: 160px; }
-    .report-shell th { background: #f4f8ff; color: var(--text); font-size: 0.95rem; }
-    .report-shell pre { padding: 18px 20px; overflow-x: auto; border-radius: 22px; border: 1px solid var(--line); background: #f6f9ff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.5); }
-    .report-shell code { font-family: "Cascadia Code", Consolas, Monaco, monospace; font-size: 0.92rem; }
-    .report-shell :not(pre) > code { padding: 0.18rem 0.42rem; border-radius: 9px; background: rgba(53, 121, 246, 0.1); color: #1e5da3; }
-    .report-shell pre code { padding: 0; background: transparent; color: #20385e; }
-    .report-shell blockquote { margin: 1.4rem 0; padding: 1rem 1.2rem; border-left: 4px solid var(--primary); background: rgba(53, 121, 246, 0.06); border-radius: 0 18px 18px 0; }
-    .report-shell hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
-    .mermaid { margin: 1.6rem 0; padding: 18px; overflow-x: auto; border-radius: 24px; border: 1px solid var(--line); background: #fbfdff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6); }
-    .edit-note { margin-top: 26px; padding: 18px 20px; border-radius: 22px; background: rgba(123, 97, 255, 0.08); color: var(--text); border: 1px solid rgba(123, 97, 255, 0.12); font-size: 0.95rem; line-height: 1.8; }
-    @media (max-width: 980px) { .summary-grid { grid-template-columns: 1fr; } .flow-grid { grid-template-columns: 1fr; } }
-    @media (max-width: 640px) { .page { padding: 18px 12px 48px; } .hero, .flow-panel, .report-shell { padding: 22px 18px; border-radius: 24px; } .hero h1 { font-size: 2rem; } .report-shell th, .report-shell td { min-width: 140px; padding: 12px; } }
+    .hero-grid { position: relative; max-width: 900px; }
+    .eyebrow-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 24px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 0.74rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .badge-primary { background: rgba(37,99,235,0.09); color: var(--primary); border: 1px solid rgba(37,99,235,0.22); }
+    .badge-accent  { background: rgba(124,58,237,0.09); color: var(--accent); border: 1px solid rgba(124,58,237,0.2); }
+    .badge-green   { background: rgba(5,150,105,0.09); color: var(--green); border: 1px solid rgba(5,150,105,0.22); }
+    .badge-orange  { background: rgba(234,88,12,0.09); color: var(--orange); border: 1px solid rgba(234,88,12,0.2); }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .hero h1 {
+      font-size: clamp(2.2rem, 4vw, 3.6rem);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      background: linear-gradient(135deg, #0f172a 20%, var(--primary) 60%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 20px;
+    }
+    .hero-sub {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      line-height: 1.8;
+      max-width: 700px;
+      margin-bottom: 36px;
+    }
+    .hero-stats {
+      display: flex; flex-wrap: wrap; gap: 12px;
+    }
+    .stat-pill {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 18px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-size: 0.88rem;
+      transition: all var(--transition);
+    }
+    .stat-pill:hover { border-color: var(--border-glow); background: #eaf0ff; }
+    .stat-pill strong { color: var(--text); }
+    .stat-pill span { color: var(--text-muted); }
+
+    /* ── Content Area ───────────────────────────────────────────────── */
+    .content { padding: 0 64px 80px; max-width: 1100px; }
+
+    /* ── Section Headers ────────────────────────────────────────────── */
+    .section-divider {
+      display: flex; align-items: center; gap: 14px;
+      padding: 52px 0 24px;
+    }
+    .section-number {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; border-radius: 9px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      font-size: 0.78rem; font-weight: 800; color: #fff;
+      box-shadow: 0 2px 10px rgba(37,99,235,0.22);
+      flex-shrink: 0;
+    }
+    .section-divider h2 {
+      font-size: clamp(1.35rem, 2vw, 1.7rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+    .section-line { flex: 1; height: 1px; background: var(--border); }
+    h3 {
+      font-size: 1.1rem; font-weight: 700; color: var(--text);
+      margin: 28px 0 10px;
+      letter-spacing: -0.02em;
+    }
+    h4 { font-size: 0.78rem; font-weight: 700; color: var(--text-faint); margin: 18px 0 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+    p { color: var(--text-muted); line-height: 1.85; margin-bottom: 14px; }
+    ul, ol { color: var(--text-muted); padding-left: 1.5rem; margin: 10px 0 16px; }
+    li { line-height: 1.8; margin-bottom: 4px; }
+    li::marker { color: var(--primary); }
+    strong { color: var(--text); font-weight: 600; }
+
+    /* ── Cards ──────────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      margin: 16px 0;
+      box-shadow: var(--shadow-sm);
+      transition: all var(--transition);
+    }
+    .card:hover { border-color: var(--border-glow); background: var(--bg-card-hover); box-shadow: var(--shadow); }
+
+    /* ── Pipeline Flow Cards ────────────────────────────────────────── */
+    .pipeline-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin: 24px 0;
+    }
+    .pipeline-card {
+      position: relative;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(15,23,42,0.06);
+      transition: all var(--transition);
+      overflow: hidden;
+    }
+    .pipeline-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      opacity: 0;
+      transition: opacity var(--transition);
+    }
+    .pipeline-card:hover { border-color: var(--border-glow); background: var(--bg-card-hover); transform: translateY(-3px); box-shadow: 0 12px 32px rgba(37,99,235,0.12); }
+    .pipeline-card:hover::before { opacity: 1; }
+    .pipeline-step {
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: #fff; font-size: 0.8rem; font-weight: 900;
+      margin-bottom: 14px;
+    }
+    .pipeline-card h3 { margin: 0 0 8px; font-size: 0.95rem; font-weight: 700; }
+    .pipeline-card p { margin: 0; font-size: 0.875rem; color: var(--text-muted); line-height: 1.65; }
+
+    /* ── Mermaid Diagrams ───────────────────────────────────────────── */
+    .diagram-wrapper {
+      margin: 24px 0;
+      background: #fafcff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      overflow-x: auto;
+      box-shadow: 0 2px 12px rgba(15,23,42,0.05);
+    }
+    .diagram-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .diagram-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .mermaid { display: flex; justify-content: center; }
+
+    /* ── Code Blocks ────────────────────────────────────────────────── */
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px 24px;
+      overflow-x: auto;
+      margin: 14px 0;
+      position: relative;
+    }
+    pre::before {
+      content: attr(data-lang);
+      position: absolute; top: 10px; right: 14px;
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    code {
+      font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+      font-size: 0.875rem;
+      color: #1e40af;
+      line-height: 1.7;
+    }
+    :not(pre) > code {
+      background: rgba(37,99,235,0.09);
+      color: #1d4ed8;
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 0.84em;
+    }
+
+    /* ── Tables ─────────────────────────────────────────────────────── */
+    .table-wrapper {
+      margin: 20px 0;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      overflow-x: auto;
+      box-shadow: 0 2px 12px rgba(15,23,42,0.05);
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 640px; }
+    thead { background: rgba(37,99,235,0.05); }
+    th {
+      padding: 13px 18px;
+      text-align: left;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 13px 18px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      border-bottom: 1px solid rgba(59,89,152,0.07);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(37,99,235,0.03); }
+    td a { color: var(--primary); }
+    td:first-child { color: var(--text); font-weight: 500; }
+
+    /* ── Info/Alert Boxes ───────────────────────────────────────────── */
+    .callout {
+      display: flex; gap: 14px;
+      padding: 18px 20px;
+      border-radius: var(--radius-md);
+      margin: 16px 0;
+    }
+    .callout-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+    .callout-content { flex: 1; font-size: 0.92rem; line-height: 1.75; }
+    .callout-info    { background: rgba(37,99,235,0.06); border: 1px solid rgba(37,99,235,0.18); }
+    .callout-warning { background: rgba(234,88,12,0.06); border: 1px solid rgba(234,88,12,0.18); }
+    .callout-success { background: rgba(5,150,105,0.06); border: 1px solid rgba(5,150,105,0.18); }
+    .callout-info .callout-content { color: #1d4ed8; }
+    .callout-warning .callout-content { color: #c2410c; }
+    .callout-success .callout-content { color: #065f46; }
+
+    /* ── Highlight rows ──────────────────────────────────────────────── */
+    .highlight-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin: 20px 0;
+    }
+    .highlight-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(15,23,42,0.05);
+      transition: all var(--transition);
+    }
+    .highlight-card:hover { border-color: var(--border-glow); background: #eef3ff; box-shadow: 0 6px 22px rgba(37,99,235,0.09); }
+    .highlight-card .hc-label { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 6px; }
+    .highlight-card .hc-value { font-size: 1rem; font-weight: 700; color: var(--text); }
+    .highlight-card .hc-sub { font-size: 0.83rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── Folder Tree ────────────────────────────────────────────────── */
+    .file-tree {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px 24px;
+      margin: 14px 0;
+      box-shadow: 0 2px 10px rgba(15,23,42,0.05);
+    }
+    .file-tree code {
+      display: block;
+      white-space: pre;
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      line-height: 1.85;
+    }
+    .file-tree .dir  { color: #1d4ed8; font-weight: 600; }
+    .file-tree .file { color: #64748b; }
+
+    /* ── Tech Stack Grid ──────────────────────────────────────────────── */
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .tech-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex; flex-direction: column; gap: 6px;
+      box-shadow: 0 2px 8px rgba(15,23,42,0.05);
+      transition: all var(--transition);
+    }
+    .tech-card:hover { border-color: var(--border-glow); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(37,99,235,0.09); }
+    .tech-name { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+    .tech-role { font-size: 0.78rem; color: var(--text-muted); }
+    .tech-layer { font-size: 0.67rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); }
+
+    /* ── Score Visualization ─────────────────────────────────────────── */
+    .score-demo {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      margin: 20px 0;
+      box-shadow: 0 2px 12px rgba(15,23,42,0.06);
+    }
+    .score-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .score-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); width: 160px; flex-shrink: 0; }
+    .score-bar { flex: 1; height: 8px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+    .score-bar-fill { height: 100%; border-radius: 99px; transition: width 1s cubic-bezier(0.4,0,0.2,1); }
+    .score-val { font-size: 0.85rem; font-weight: 700; color: var(--text); width: 48px; text-align: right; flex-shrink: 0; }
+    .fill-text    { background: linear-gradient(90deg, var(--primary), #60a5fa); }
+    .fill-diagram { background: linear-gradient(90deg, var(--accent), #c4b5fd); }
+    .fill-formula { background: linear-gradient(90deg, var(--green), #86efac); }
+    .fill-total   { background: linear-gradient(90deg, var(--orange), var(--yellow)); }
+
+    /* ── TOC ─────────────────────────────────────────────────────────── */
+    .toc-box {
+      background: linear-gradient(135deg, #f8faff, #f3f6fd);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px 32px;
+      margin: 32px 0;
+      box-shadow: 0 2px 12px rgba(15,23,42,0.05);
+    }
+    .toc-box h2 { font-size: 0.8rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 16px; }
+    .toc-list { columns: 2; column-gap: 28px; }
+    .toc-list li { margin-bottom: 6px; break-inside: avoid; }
+    .toc-list a { font-size: 0.875rem; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color var(--transition); }
+    .toc-list a:hover { color: var(--primary); }
+    .toc-num { font-size: 0.7rem; font-weight: 700; color: var(--text-faint); width: 22px; flex-shrink: 0; }
+
+    /* ── Endpoint List ───────────────────────────────────────────────── */
+    .endpoint-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+    .endpoint-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.87rem;
+      box-shadow: 0 1px 4px rgba(15,23,42,0.04);
+    }
+    .method {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 0.68rem; font-weight: 800; letter-spacing: 0.04em;
+      flex-shrink: 0; min-width: 44px;
+    }
+    .method-get  { background: rgba(5,150,105,0.1); color: var(--green); }
+    .method-post { background: rgba(37,99,235,0.1); color: var(--primary); }
+    .endpoint-path { font-family: 'JetBrains Mono', monospace; color: var(--text); font-size: 0.84rem; }
+    .endpoint-desc { color: var(--text-muted); margin-left: auto; font-size: 0.8rem; }
+
+    /* ── Footer ──────────────────────────────────────────────────────── */
+    .footer {
+      padding: 40px 64px;
+      border-top: 1px solid var(--border);
+      background: #f8faff;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    }
+    .footer-text { font-size: 0.82rem; color: var(--text-faint); }
+
+    /* ── Mobile Nav Toggle ───────────────────────────────────────────── */
+    .nav-toggle {
+      display: none;
+      position: fixed; top: 16px; left: 16px; z-index: 200;
+      width: 40px; height: 40px; border-radius: 10px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      align-items: center; justify-content: center;
+      font-size: 1.1rem; cursor: pointer;
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────────── */
+    @media (max-width: 1100px) {
+      .pipeline-grid { grid-template-columns: repeat(2, 1fr); }
+      .highlight-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 900px) {
+      :root { --nav-w: 0px; }
+      .nav-sidebar {
+        transform: translateX(-100%);
+        width: 260px;
+        transition: transform 0.3s ease;
+      }
+      .nav-sidebar.open { transform: translateX(0); }
+      .nav-toggle { display: flex; }
+      .main-wrapper { margin-left: 0; }
+      .hero, .content { padding-left: 28px; padding-right: 28px; }
+      .footer { padding: 28px; }
+    }
+    @media (max-width: 640px) {
+      .hero { padding: 48px 20px 56px; }
+      .content { padding: 0 20px 60px; }
+      .pipeline-grid { grid-template-columns: 1fr; }
+      .toc-list { columns: 1; }
+      .hero h1 { font-size: 1.9rem; }
+    }
   </style>
 </head>
 <body>
-  <main class="page">
-    <section class="hero">
-      <span class="eyebrow">Complete Project Report</span>
+
+<!-- Mobile nav toggle -->
+<button class="nav-toggle" id="navToggle" aria-label="Open navigation">☰</button>
+
+<!-- ── Sidebar Navigation ──────────────────────────────────────────────── -->
+<nav class="nav-sidebar" id="sidebar">
+  <div class="nav-logo">
+    <div class="logo-wordmark">
+      <div class="logo-wordmark-line">
+        <span class="logo-wordmark-text">Ai Grader</span><span class="logo-wordmark-dot">.</span>
+      </div>
+      <div class="logo-sub">Evaluation System Docs</div>
+    </div>
+  </div>
+  <div class="nav-search">
+    <input type="text" id="navSearch" placeholder="Search sections…" aria-label="Search" />
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-label">Overview</div>
+    <a class="nav-link active" href="#intro"><span class="nav-dot"></span>Introduction</a>
+    <a class="nav-link" href="#objectives"><span class="nav-dot"></span>Objectives</a>
+    <a class="nav-link" href="#scope"><span class="nav-dot"></span>Scope & Limitations</a>
+    <a class="nav-link" href="#users"><span class="nav-dot"></span>End Users</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-label">Architecture</div>
+    <a class="nav-link" href="#architecture"><span class="nav-dot"></span>System Architecture</a>
+    <a class="nav-link" href="#repo"><span class="nav-dot"></span>Repository Structure</a>
+    <a class="nav-link" href="#inputs"><span class="nav-dot"></span>Input Design</a>
+    <a class="nav-link" href="#rubric"><span class="nav-dot"></span>Rubric Format</a>
+    <a class="nav-link" href="#workflow"><span class="nav-dot"></span>End-to-End Workflow</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-label">Core Modules</div>
+    <a class="nav-link" href="#ocr"><span class="nav-dot"></span>OCR Layer</a>
+    <a class="nav-link" href="#diagrams"><span class="nav-dot"></span>Diagram Extraction</a>
+    <a class="nav-link" href="#formulas"><span class="nav-dot"></span>Formula Extraction</a>
+    <a class="nav-link" href="#formula-eval"><span class="nav-dot"></span>Formula Evaluation</a>
+    <a class="nav-link" href="#sbert"><span class="nav-dot"></span>SBERT Evaluation</a>
+    <a class="nav-link" href="#gemini"><span class="nav-dot"></span>Gemini LLM Path</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-label">Infrastructure</div>
+    <a class="nav-link" href="#pipeline"><span class="nav-dot"></span>Pipeline Orchestration</a>
+    <a class="nav-link" href="#reports"><span class="nav-dot"></span>Report Generation</a>
+    <a class="nav-link" href="#fastapi"><span class="nav-dot"></span>FastAPI Backend</a>
+    <a class="nav-link" href="#streamlit"><span class="nav-dot"></span>Streamlit Interface</a>
+    <a class="nav-link" href="#nextjs"><span class="nav-dot"></span>Next.js Frontend</a>
+    <a class="nav-link" href="#deployment"><span class="nav-dot"></span>Deployment</a>
+    <a class="nav-link" href="#env"><span class="nav-dot"></span>Environment Variables</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-label">Reference</div>
+    <a class="nav-link" href="#tools"><span class="nav-dot"></span>Tools & Libraries</a>
+    <a class="nav-link" href="#dataflow"><span class="nav-dot"></span>Sample Data Flow</a>
+    <a class="nav-link" href="#strengths"><span class="nav-dot"></span>Strengths</a>
+    <a class="nav-link" href="#challenges"><span class="nav-dot"></span>Challenges</a>
+    <a class="nav-link" href="#future"><span class="nav-dot"></span>Future Work</a>
+    <a class="nav-link" href="#conclusion"><span class="nav-dot"></span>Conclusion</a>
+  </div>
+</nav>
+
+<!-- ── Main Content ──────────────────────────────────────────────────────── -->
+<div class="main-wrapper">
+
+  <!-- Hero -->
+  <header class="hero">
+    <div class="hero-grid">
+      <div class="eyebrow-group">
+        <span class="badge badge-primary"><span class="badge-dot"></span>Complete Project Report</span>
+        <span class="badge badge-accent"><span class="badge-dot"></span>Multimodal AI</span>
+        <span class="badge badge-green"><span class="badge-dot"></span>Research Grade</span>
+      </div>
       <h1>Automated Subjective Answer Sheet Evaluation System</h1>
-      <p>
-        This standalone documentation page explains the project from scratch: the problem statement,
-        objectives, architecture, pipeline flow, OCR strategy, formula and diagram handling,
-        evaluation methods, reports, deployment structure, and the tools, libraries, models, and
-        resources used across the full system.
+      <p class="hero-sub">
+        A multimodal AI pipeline for evaluating descriptive academic answer sheets — combining
+        OCR, semantic similarity, diagram analysis, formula parsing, and rubric-guided scoring
+        into one traceable, explainable workflow.
       </p>
-      <div class="hero-meta">
-        <span>Standalone documentation page</span>
-        <span>No app header or evaluation UI</span>
-        <span>Manual-edit friendly HTML file</span>
+      <div class="hero-stats">
+        <div class="stat-pill"><strong>3</strong> <span>OCR backends</span></div>
+        <div class="stat-pill"><strong>2</strong> <span>Evaluation engines</span></div>
+        <div class="stat-pill"><strong>3</strong> <span>Answer modalities</span></div>
+        <div class="stat-pill"><strong>FastAPI</strong> <span>+ Next.js</span></div>
+        <div class="stat-pill"><strong>Gemini 2.5 Flash</strong> <span>LLM scoring</span></div>
+        <div class="stat-pill"><strong>SBERT + CLIP</strong> <span>local scoring</span></div>
       </div>
-    </section>
+    </div>
+  </header>
 
-    <section class="summary-grid">
+  <!-- Content -->
+  <main class="content">
 
-      <div>
-        <section class="flow-panel">
-          <h2>System Flow</h2>
-          <p class="section-copy">
-            The grading pipeline follows a fixed sequence so text extraction, diagram analysis,
-            formula parsing, semantic scoring, and report generation remain traceable and explainable.
-          </p>
-          <div class="flow-grid">
-            <article class="flow-card"><span>1</span><h3>Input Collection</h3><p>Ideal answer sheet, rubric JSON, and student answer sheets are uploaded for one evaluation run.</p></article>
-<article class="flow-card"><span>2</span><h3>OCR & Extraction</h3><p>Printed sheets use EasyOCR, handwritten sheets can use Google Vision AI or Azure Document Intelligence.</p></article>
-<article class="flow-card"><span>3</span><h3>Formula Parsing</h3><p>Mathematical regions are isolated and converted through pix2tex before symbolic validation with SymPy.</p></article>
-<article class="flow-card"><span>4</span><h3>Diagram Analysis</h3><p>Visual regions are extracted with OpenCV-based preprocessing for diagram-aware comparison.</p></article>
-<article class="flow-card"><span>5</span><h3>Evaluation</h3><p>SBERT or Gemini scores the extracted answers against the ideal reference using rubric-aware logic.</p></article>
-<article class="flow-card"><span>6</span><h3>Result Generation</h3><p>The system produces JSON outputs, ranking summaries, and downloadable PDF reports.</p></article>
-          </div>
-        </section>
+    <!-- Table of contents -->
+    <div class="toc-box">
+      <h2>Table of Contents</h2>
+      <ul class="toc-list">
+        <li><a href="#intro"><span class="toc-num">01</span>Project Overview</a></li>
+        <li><a href="#objectives"><span class="toc-num">02</span>Objectives</a></li>
+        <li><a href="#scope"><span class="toc-num">03</span>Scope & Limitations</a></li>
+        <li><a href="#users"><span class="toc-num">04</span>End Users</a></li>
+        <li><a href="#architecture"><span class="toc-num">05</span>System Architecture</a></li>
+        <li><a href="#repo"><span class="toc-num">06</span>Repository Structure</a></li>
+        <li><a href="#inputs"><span class="toc-num">07</span>Input Design</a></li>
+        <li><a href="#rubric"><span class="toc-num">08</span>Rubric Format</a></li>
+        <li><a href="#workflow"><span class="toc-num">09</span>End-to-End Workflow</a></li>
+        <li><a href="#ocr"><span class="toc-num">10</span>OCR Layer</a></li>
+        <li><a href="#diagrams"><span class="toc-num">11</span>Diagram Extraction</a></li>
+        <li><a href="#formulas"><span class="toc-num">12</span>Formula Extraction</a></li>
+        <li><a href="#formula-eval"><span class="toc-num">13</span>Formula Evaluation</a></li>
+        <li><a href="#sbert"><span class="toc-num">14</span>SBERT Evaluation</a></li>
+        <li><a href="#gemini"><span class="toc-num">15</span>Gemini LLM Path</a></li>
+        <li><a href="#pipeline"><span class="toc-num">16</span>Pipeline Orchestration</a></li>
+        <li><a href="#reports"><span class="toc-num">17</span>Report Generation</a></li>
+        <li><a href="#fastapi"><span class="toc-num">18</span>FastAPI Backend</a></li>
+        <li><a href="#streamlit"><span class="toc-num">19</span>Streamlit Interface</a></li>
+        <li><a href="#nextjs"><span class="toc-num">20</span>Next.js Frontend</a></li>
+        <li><a href="#deployment"><span class="toc-num">21</span>Deployment</a></li>
+        <li><a href="#env"><span class="toc-num">22</span>Environment Variables</a></li>
+        <li><a href="#tools"><span class="toc-num">23</span>Tools & Libraries</a></li>
+        <li><a href="#dataflow"><span class="toc-num">24</span>Sample Data Flow</a></li>
+        <li><a href="#strengths"><span class="toc-num">25</span>Strengths & Challenges</a></li>
+        <li><a href="#future"><span class="toc-num">26</span>Future Enhancements</a></li>
+      </ul>
+    </div>
 
-        <article class="report-shell">
-          <h2 id="1-project-overview">1. Project Overview</h2>
-<h3 id="1-1-title">1.1 Title</h3>
-<p>Automated Subjective Answer Sheet Evaluation System</p>
-<h3 id="1-2-problem-statement">1.2 Problem Statement</h3>
-<p>Traditional answer-sheet evaluation works reasonably well for objective questions, but subjective answer sheets are much harder to assess automatically. In descriptive exams, students do not always write the same words as the ideal answer. They may express the same concept in a different sentence structure, draw diagrams differently, or write mathematical expressions in equivalent but non-identical forms.</p>
-<p>Because of this, simple keyword matching is not enough. A practical evaluation system must understand:</p>
-<ul>
-<li>textual meaning</li>
-<li>diagrams and visual structure</li>
-<li>formulas and mathematical equivalence</li>
-<li>printed as well as handwritten answer sheets</li>
-</ul>
-<p>This project addresses that problem by building a multimodal evaluation pipeline that can compare student answers with an ideal reference answer sheet using OCR, semantic similarity, diagram comparison, formula-aware checking, and report generation.</p>
-<h3 id="1-3-project-goal">1.3 Project Goal</h3>
-<p>The goal of this project is to create a usable academic evaluation platform that can:</p>
-<ul>
-<li>accept an ideal answer sheet, rubric, and student answer sheets</li>
-<li>extract text from answer sheets using suitable OCR backends</li>
-<li>evaluate textual content semantically instead of only matching exact keywords</li>
-<li>separately process diagrams and formulas</li>
-<li>generate per-student scores and feedback</li>
-<li>provide structured outputs such as JSON results, summary tables, and downloadable PDF reports</li>
-</ul>
-<h3 id="1-4-why-this-project-matters">1.4 Why This Project Matters</h3>
-<p>Manual checking of subjective answer sheets is time-consuming, repetitive, and inconsistent across large batches. This system is designed to reduce manual effort while still preserving a rubric-guided and explainable workflow.</p>
-<p>The project is especially useful for:</p>
-<ul>
-<li>faculty members checking descriptive answer sheets</li>
-<li>research projects in educational technology</li>
-<li>experiments in multimodal grading</li>
-<li>building a future product-grade evaluation tool</li>
-</ul>
-<h2 id="2-objectives">2. Objectives</h2>
-<p>The major objectives of the project are:</p>
-<ol>
-<li>Build a pipeline that evaluates descriptive answers beyond exact keyword matching.</li>
-<li>Support both printed and handwritten answer sheets through multiple OCR paths.</li>
-<li>Add diagram-aware scoring for visual answers.</li>
-<li>Add formula-aware scoring for mathematical expressions.</li>
-<li>Support two evaluation modes:<ul>
-<li>local semantic evaluation using SBERT</li>
-<li>LLM-based evaluation using Gemini</li>
-</ul>
-</li>
-<li>Generate human-readable reports for each student.</li>
-<li>Provide both a research-facing Streamlit interface and a product-style web interface.</li>
-</ol>
-<h2 id="3-scope-of-the-project">3. Scope of the Project</h2>
-<h3 id="3-1-in-scope">3.1 In Scope</h3>
-<ul>
-<li>Subjective answer sheet evaluation</li>
-<li>OCR-based text extraction</li>
-<li>Printed sheet OCR using EasyOCR</li>
-<li>Handwritten sheet OCR using Google Vision AI and Azure Document Intelligence</li>
-<li>Semantic text similarity scoring</li>
-<li>Diagram extraction and visual comparison</li>
-<li>Formula extraction and symbolic evaluation</li>
-<li>Rubric-based weighted scoring</li>
-<li>JSON and PDF report generation</li>
-<li>Streamlit interface for research workflow</li>
-<li>FastAPI backend and Next.js frontend for web workflow</li>
-</ul>
-<h3 id="3-2-current-assumptions">3.2 Current Assumptions</h3>
-<ul>
-<li>One page is currently treated as one question.</li>
-<li>The ideal answer sheet acts as the reference solution.</li>
-<li>Rubric JSON provides per-question weights and maximum marks.</li>
-<li>Diagram regions are expected mainly in lower or distinct visual sections of a page.</li>
-<li>Formula extraction depends on OCR layout heuristics.</li>
-</ul>
-<h3 id="3-3-current-limitations">3.3 Current Limitations</h3>
-<ul>
-<li>Very complex handwritten derivations can still be difficult to OCR accurately.</li>
-<li>OCR quality strongly affects downstream scoring quality.</li>
-<li>Formula region detection is heuristic-based, not perfect.</li>
-<li>Diagram extraction currently uses connected-component style visual detection, so unusual layouts can affect accuracy.</li>
-<li>The LLM path is rubric-aware, but the symbolic formula path is primarily integrated in the SBERT workflow.</li>
-</ul>
-<h2 id="4-end-users">4. End Users</h2>
-<p>The main users of the system are:</p>
-<ul>
-<li>faculty or examiners</li>
-<li>project supervisors and reviewers</li>
-<li>researchers working on answer-sheet automation</li>
-<li>students or demo audiences observing the evaluation system</li>
-</ul>
-<h2 id="5-high-level-system-description">5. High-Level System Description</h2>
-<p>The project is a multimodal pipeline built around three major ideas:</p>
-<ol>
-<li>Extract evidence from answer sheets.</li>
-<li>Evaluate each evidence type using the most suitable model or method.</li>
-<li>Combine results according to rubric weights.</li>
-</ol>
-<p>The system processes three major answer modalities:</p>
-<ul>
-<li>text</li>
-<li>diagrams</li>
-<li>formulas</li>
-</ul>
-<p>It also supports multiple OCR backends:</p>
-<ul>
-<li>EasyOCR</li>
-<li>Google Vision AI</li>
-<li>Azure Document Intelligence</li>
-</ul>
-<p>And two evaluation engines:</p>
-<ul>
-<li>SBERT local evaluation</li>
-<li>Gemini LLM evaluation</li>
-</ul>
-<h2 id="6-overall-architecture">6. Overall Architecture</h2>
-<div class="mermaid">flowchart LR
-    A[&quot;User Interface&lt;br/&gt;Streamlit or Next.js&quot;] --&gt; B[&quot;FastAPI / Local Pipeline Trigger&quot;]
-    B --&gt; C[&quot;Input Validation&lt;br/&gt;ideal PDF + rubric JSON + student PDFs&quot;]
-    C --&gt; D[&quot;OCR Layer&lt;br/&gt;EasyOCR / Google Vision AI / Azure Document Intelligence&quot;]
-    D --&gt; E[&quot;Formula Extraction&lt;br/&gt;pix2tex preparation&quot;]
-    D --&gt; F[&quot;Diagram Extraction&lt;br/&gt;OpenCV connected components&quot;]
-    D --&gt; G[&quot;Text Extraction&lt;br/&gt;page-wise OCR JSON&quot;]
-    E --&gt; H[&quot;Formula Evaluation&lt;br/&gt;pix2tex + SymPy&quot;]
-    F --&gt; I[&quot;Diagram Evaluation&lt;br/&gt;CLIP similarity&quot;]
-    G --&gt; J[&quot;Text Evaluation&lt;br/&gt;SBERT or Gemini&quot;]
-    H --&gt; K[&quot;Rubric Weighted Aggregation&quot;]
-    I --&gt; K
-    J --&gt; K
-    K --&gt; L[&quot;Evaluation JSON&quot;]
-    K --&gt; M[&quot;PDF Report Generation&quot;]
-    L --&gt; N[&quot;Summary Tables / Run History&quot;]
-    M --&gt; N</div>
+    <!-- 1. Project Overview -->
+    <div id="intro" class="section-divider">
+      <div class="section-number">1</div>
+      <h2>Project Overview</h2>
+      <div class="section-line"></div>
+    </div>
 
-<h2 id="7-repository-structure">7. Repository Structure</h2>
-<pre><code class="language-text">auto_subjective_grader/
-|-- backend_api/
-|   |-- main.py
-|   |-- settings.py
-|   |-- content.py
-|
-|-- src/
-|   |-- app.py
-|   |-- pipeline_service.py
-|   |-- ocr_pipeline.py
-|   |-- diagram_extractor.py
-|   |-- formula_pipeline.py
-|   |-- formula_evaluator.py
-|   |-- evaluation_core.py
-|   |-- llm_evaluator.py
-|   |-- report_generator.py
-|
-|-- web/
-|   |-- app/
-|   |-- components/
-|   |-- lib/
-|   |-- public/
-|
-|-- data/
-|   |-- ideal/
-|   |-- students/
-|
-|-- results/
-|   |-- ocr/
-|   |-- diagrams/
-|   |-- formulas/
-|   |-- formula_crops/
-|   |-- eval/
-|   |-- eval_llm/
-|   |-- reports/
-|   |-- reports_llm/
-|
-|-- rubric.json
-|-- requirements.txt
-|-- requirements.backend.txt
-|-- Dockerfile
-|-- README.md
-</code></pre>
-<h3 id="7-1-purpose-of-major-folders">7.1 Purpose of Major Folders</h3>
-<h4 id="src"><code>src/</code></h4>
-<p>Contains the core research pipeline and Streamlit app.</p>
-<h4 id="backend-api"><code>backend_api/</code></h4>
-<p>Contains the FastAPI backend used by the product-style web interface.</p>
-<h4 id="web"><code>web/</code></h4>
-<p>Contains the professional web frontend built using Next.js.</p>
-<h4 id="data"><code>data/</code></h4>
-<p>Stores local ideal and student PDFs for development and research testing.</p>
-<h4 id="results"><code>results/</code></h4>
-<p>Stores all generated artifacts such as OCR JSON, diagram crops, formula outputs, evaluation JSON, and PDF reports.</p>
-<h2 id="8-input-design">8. Input Design</h2>
-<p>Every run starts with three required inputs:</p>
-<ol>
-<li>Ideal answer sheet PDF</li>
-<li>Rubric JSON</li>
-<li>Student answer sheet PDFs</li>
-</ol>
-<h3 id="8-1-ideal-answer-sheet">8.1 Ideal Answer Sheet</h3>
-<p>The ideal answer sheet acts as the ground-truth reference for all comparisons.</p>
-<h3 id="8-2-rubric-json">8.2 Rubric JSON</h3>
-<p>The rubric defines:</p>
-<ul>
-<li>maximum marks for each question</li>
-<li>text weight</li>
-<li>diagram weight</li>
-<li>formula weight</li>
-<li>whether missing diagrams should be penalized</li>
-<li>whether missing formulas should be penalized</li>
-</ul>
-<h3 id="8-3-student-answer-sheets">8.3 Student Answer Sheets</h3>
-<p>One or more student PDFs are uploaded and evaluated against the ideal answer sheet.</p>
-<h2 id="9-rubric-format">9. Rubric Format</h2>
-<p>The project uses a JSON rubric. A simplified example is:</p>
-<pre><code class="language-json">{
-  &quot;1&quot;: {
-    &quot;max_marks&quot;: 10,
-    &quot;text_weight&quot;: 0.6,
-    &quot;diagram_weight&quot;: 0.4,
-    &quot;formula_weight&quot;: 0.2,
-    &quot;penalize_missing_diagram&quot;: true,
-    &quot;penalize_missing_formula&quot;: true
+    <h3>1.1 Problem Statement</h3>
+    <p>Traditional answer-sheet evaluation works reasonably well for objective questions, but subjective answer sheets are much harder to assess automatically. In descriptive exams, students do not always write the same words as the ideal answer — they may express the same concept in a different sentence structure, draw diagrams differently, or write mathematical expressions in equivalent but non-identical forms.</p>
+    <p>Because of this, simple keyword matching is not enough. A practical evaluation system must understand:</p>
+    <div class="highlight-grid">
+      <div class="highlight-card">
+        <div class="hc-label">Textual Understanding</div>
+        <div class="hc-value">Semantic Similarity</div>
+        <div class="hc-sub">Beyond keyword matching — meaning-level comparison using SBERT embeddings.</div>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">Visual Analysis</div>
+        <div class="hc-value">Diagram Comparison</div>
+        <div class="hc-sub">Circuit diagrams, flowcharts, and figures compared using CLIP vision models.</div>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">Mathematical Reasoning</div>
+        <div class="hc-value">Formula Equivalence</div>
+        <div class="hc-sub">Symbolic math validation via pix2tex → LaTeX → SymPy parsing chain.</div>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">Handwriting Support</div>
+        <div class="hc-value">Multi-Backend OCR</div>
+        <div class="hc-sub">EasyOCR, Google Vision AI, and Azure Document Intelligence.</div>
+      </div>
+    </div>
+
+    <h3>1.2 Project Goal</h3>
+    <p>To create a usable academic evaluation platform that can accept an ideal answer sheet, rubric, and student answer sheets; extract and evaluate textual content semantically; separately process diagrams and formulas; and generate per-student scores, feedback, and downloadable PDF reports.</p>
+
+    <h3>1.3 Why This Project Matters</h3>
+    <p>Manual checking of subjective answer sheets is time-consuming, repetitive, and inconsistent across large batches. This system reduces manual effort while preserving a rubric-guided and explainable workflow — especially valuable for faculty members, researchers in educational technology, and experiments in multimodal grading.</p>
+
+    <!-- System Flow Cards -->
+    <div id="pipeline-overview" style="margin-top:28px;">
+      <h3>System Flow — 6-Stage Pipeline</h3>
+      <div class="pipeline-grid">
+        <div class="pipeline-card">
+          <div class="pipeline-step">1</div>
+          <h3>Input Collection</h3>
+          <p>Ideal answer sheet PDF, rubric JSON, and student answer sheet PDFs are uploaded for one evaluation run.</p>
+        </div>
+        <div class="pipeline-card">
+          <div class="pipeline-step">2</div>
+          <h3>OCR & Extraction</h3>
+          <p>Printed sheets use EasyOCR; handwritten sheets use Google Vision AI or Azure Document Intelligence.</p>
+        </div>
+        <div class="pipeline-card">
+          <div class="pipeline-step">3</div>
+          <h3>Formula Parsing</h3>
+          <p>Mathematical regions are isolated and converted through pix2tex before symbolic validation with SymPy.</p>
+        </div>
+        <div class="pipeline-card">
+          <div class="pipeline-step">4</div>
+          <h3>Diagram Analysis</h3>
+          <p>Visual regions are extracted with OpenCV-based preprocessing for diagram-aware comparison using CLIP.</p>
+        </div>
+        <div class="pipeline-card">
+          <div class="pipeline-step">5</div>
+          <h3>Evaluation</h3>
+          <p>SBERT or Gemini scores the extracted answers against the ideal reference using rubric-aware weighting.</p>
+        </div>
+        <div class="pipeline-card">
+          <div class="pipeline-step">6</div>
+          <h3>Result Generation</h3>
+          <p>The system produces JSON outputs, ranking summaries, and downloadable PDF reports per student.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Objectives -->
+    <div id="objectives" class="section-divider">
+      <div class="section-number">2</div>
+      <h2>Objectives</h2>
+      <div class="section-line"></div>
+    </div>
+    <ol>
+      <li>Build a pipeline that evaluates descriptive answers beyond exact keyword matching.</li>
+      <li>Support both printed and handwritten answer sheets through multiple OCR paths.</li>
+      <li>Add diagram-aware scoring for visual answers.</li>
+      <li>Add formula-aware scoring for mathematical expressions.</li>
+      <li>Support two evaluation modes: <strong>local SBERT</strong> and <strong>LLM-based Gemini</strong> evaluation.</li>
+      <li>Generate human-readable PDF reports for each student.</li>
+      <li>Provide both a research-facing Streamlit interface and a product-style Next.js web interface.</li>
+    </ol>
+
+    <!-- 3. Scope -->
+    <div id="scope" class="section-divider">
+      <div class="section-number">3</div>
+      <h2>Scope & Limitations</h2>
+      <div class="section-line"></div>
+    </div>
+    <h3>3.1 In Scope</h3>
+    <ul>
+      <li>Subjective answer sheet evaluation with OCR-based text extraction</li>
+      <li>Printed sheet OCR (EasyOCR), handwritten OCR (Google Vision AI + Azure)</li>
+      <li>Semantic text similarity scoring, diagram extraction + visual comparison</li>
+      <li>Formula extraction + symbolic evaluation via SymPy</li>
+      <li>Rubric-based weighted scoring with JSON and PDF report generation</li>
+      <li>Streamlit research UI + FastAPI backend + Next.js web frontend</li>
+    </ul>
+    <h3>3.2 Current Assumptions</h3>
+    <ul>
+      <li>One page is treated as one question.</li>
+      <li>The ideal answer sheet acts as the reference solution.</li>
+      <li>Rubric JSON provides per-question weights and maximum marks.</li>
+      <li>Diagram regions are expected mainly in lower or distinct visual sections of a page.</li>
+      <li>Formula extraction depends on OCR layout heuristics.</li>
+    </ul>
+    <div class="callout callout-warning">
+      <span class="callout-icon">⚠</span>
+      <div class="callout-content"><strong>Current Limitations:</strong> Very complex handwritten derivations can still be difficult to OCR accurately. OCR quality strongly affects downstream scoring. Formula region detection is heuristic-based, not perfect. Diagram extraction uses connected-component style detection, so unusual layouts can affect accuracy.</div>
+    </div>
+
+    <!-- 4. End Users -->
+    <div id="users" class="section-divider">
+      <div class="section-number">4</div>
+      <h2>End Users</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>The main users of the system are:</p>
+    <ul>
+      <li><strong>Faculty / examiners</strong> — grading descriptive answer sheets at scale</li>
+      <li><strong>Project supervisors and reviewers</strong> — evaluating BTP or research submissions</li>
+      <li><strong>Researchers</strong> — working on answer-sheet automation and multimodal grading</li>
+      <li><strong>Students / demo audiences</strong> — observing the evaluation system in action</li>
+    </ul>
+
+    <!-- 5. Architecture -->
+    <div id="architecture" class="section-divider">
+      <div class="section-number">5</div>
+      <h2>System Architecture</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>The project is a multimodal pipeline built around three core ideas: <strong>extract</strong> evidence from answer sheets, <strong>evaluate</strong> each evidence type using the most suitable model, and <strong>combine</strong> results according to rubric weights.</p>
+
+    <div class="diagram-wrapper">
+      <div class="diagram-label">Overall Architecture — Left-to-Right Data Flow</div>
+      <div class="mermaid">flowchart LR
+    A["User Interface\nStreamlit or Next.js"] --> B["FastAPI / Local Pipeline Trigger"]
+    B --> C["Input Validation\nideal PDF + rubric JSON + student PDFs"]
+    C --> D["OCR Layer\nEasyOCR / Google Vision AI / Azure"]
+    D --> E["Formula Extraction\npix2tex preparation"]
+    D --> F["Diagram Extraction\nOpenCV connected components"]
+    D --> G["Text Extraction\npage-wise OCR JSON"]
+    E --> H["Formula Evaluation\npix2tex + SymPy"]
+    F --> I["Diagram Evaluation\nCLIP similarity"]
+    G --> J["Text Evaluation\nSBERT or Gemini"]
+    H --> K["Rubric Weighted Aggregation"]
+    I --> K
+    J --> K
+    K --> L["Evaluation JSON"]
+    K --> M["PDF Report Generation"]
+    L --> N["Summary Tables / Run History"]
+    M --> N</div>
+    </div>
+
+    <!-- 6. Repository Structure -->
+    <div id="repo" class="section-divider">
+      <div class="section-number">6</div>
+      <h2>Repository Structure</h2>
+      <div class="section-line"></div>
+    </div>
+    <div class="file-tree">
+      <code><span class="dir">auto_subjective_grader/</span>
+├── <span class="dir">backend_api/</span>          <span class="file">← FastAPI backend (REST API)</span>
+│   ├── <span class="file">main.py</span>
+│   ├── <span class="file">settings.py</span>
+│   └── <span class="file">content.py</span>
+│
+├── <span class="dir">src/</span>                  <span class="file">← Core research pipeline + Streamlit UI</span>
+│   ├── <span class="file">app.py</span>
+│   ├── <span class="file">pipeline_service.py</span>
+│   ├── <span class="file">ocr_pipeline.py</span>
+│   ├── <span class="file">diagram_extractor.py</span>
+│   ├── <span class="file">formula_pipeline.py</span>
+│   ├── <span class="file">formula_evaluator.py</span>
+│   ├── <span class="file">evaluation_core.py</span>
+│   ├── <span class="file">llm_evaluator.py</span>
+│   └── <span class="file">report_generator.py</span>
+│
+├── <span class="dir">web/</span>                  <span class="file">← Next.js product-style frontend</span>
+│   ├── <span class="dir">app/</span>
+│   ├── <span class="dir">components/</span>
+│   ├── <span class="dir">lib/</span>
+│   └── <span class="dir">public/</span>
+│
+├── <span class="dir">data/</span>                 <span class="file">← Development test PDFs</span>
+│   ├── <span class="dir">ideal/</span>
+│   └── <span class="dir">students/</span>
+│
+├── <span class="dir">results/</span>              <span class="file">← All generated artifacts</span>
+│   ├── <span class="dir">ocr/</span>
+│   ├── <span class="dir">diagrams/</span>
+│   ├── <span class="dir">formulas/</span>
+│   ├── <span class="dir">formula_crops/</span>
+│   ├── <span class="dir">eval/</span>
+│   ├── <span class="dir">eval_llm/</span>
+│   ├── <span class="dir">reports/</span>
+│   └── <span class="dir">reports_llm/</span>
+│
+├── <span class="file">rubric.json</span>
+├── <span class="file">requirements.txt</span>
+├── <span class="file">requirements.backend.txt</span>
+├── <span class="file">Dockerfile</span>
+└── <span class="file">README.md</span></code>
+    </div>
+
+    <!-- 7. Input Design -->
+    <div id="inputs" class="section-divider">
+      <div class="section-number">7</div>
+      <h2>Input Design</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Every run starts with three required inputs:</p>
+    <div class="highlight-grid">
+      <div class="highlight-card">
+        <div class="hc-label">Input 1</div>
+        <div class="hc-value">📄 Ideal Answer Sheet PDF</div>
+        <div class="hc-sub">Acts as the ground-truth reference for all comparisons.</div>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">Input 2</div>
+        <div class="hc-value">📋 Rubric JSON</div>
+        <div class="hc-sub">Defines max marks, text/diagram/formula weights, and penalty flags per question.</div>
+      </div>
+    </div>
+    <div class="highlight-grid" style="margin-top:0;">
+      <div class="highlight-card" style="grid-column: 1 / -1;">
+        <div class="hc-label">Input 3</div>
+        <div class="hc-value">📂 Student Answer Sheet PDFs</div>
+        <div class="hc-sub">One or more student PDFs uploaded and evaluated against the ideal answer sheet.</div>
+      </div>
+    </div>
+
+    <!-- 8. Rubric Format -->
+    <div id="rubric" class="section-divider">
+      <div class="section-number">8</div>
+      <h2>Rubric Format</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>The project uses a JSON rubric. A simplified example:</p>
+    <pre data-lang="JSON"><code>{
+  "1": {
+    "max_marks": 10,
+    "text_weight": 0.6,
+    "diagram_weight": 0.4,
+    "formula_weight": 0.2,
+    "penalize_missing_diagram": true,
+    "penalize_missing_formula": true
   }
-}
-</code></pre>
-<h3 id="9-1-meaning-of-rubric-fields">9.1 Meaning of Rubric Fields</h3>
-<ul>
-<li><code>max_marks</code>: total marks for that question</li>
-<li><code>text_weight</code>: contribution of textual answer quality</li>
-<li><code>diagram_weight</code>: contribution of diagram quality</li>
-<li><code>formula_weight</code>: contribution of formula correctness</li>
-<li><code>penalize_missing_diagram</code>: whether missing diagram should reduce marks</li>
-<li><code>penalize_missing_formula</code>: whether missing formula should reduce marks</li>
-</ul>
-<h2 id="10-end-to-end-workflow">10. End-to-End Workflow</h2>
-<div class="mermaid">flowchart TD
-    A[&quot;Upload ideal PDF&quot;] --&gt; D[&quot;Validate inputs&quot;]
-    B[&quot;Upload rubric JSON&quot;] --&gt; D
-    C[&quot;Upload student PDFs&quot;] --&gt; D
-    D --&gt; E[&quot;Write rubric to working path&quot;]
-    E --&gt; F[&quot;OCR ideal answer sheet&quot;]
-    F --&gt; G[&quot;OCR student answer sheets&quot;]
-    G --&gt; H[&quot;Formula extraction (SBERT mode)&quot;]
-    H --&gt; I[&quot;Diagram extraction&quot;]
-    I --&gt; J[&quot;Evaluate each student answer&quot;]
-    J --&gt; K[&quot;Save evaluation JSON&quot;]
-    K --&gt; L[&quot;Generate PDF reports&quot;]
-    L --&gt; M[&quot;Show ranking table and downloads&quot;]</div>
+}</code></pre>
 
-<h3 id="10-1-workflow-stages">10.1 Workflow Stages</h3>
-<ol>
-<li>Input validation</li>
-<li>OCR on ideal answer sheet</li>
-<li>OCR on each student sheet</li>
-<li>Formula extraction for SBERT mode</li>
-<li>Diagram extraction</li>
-<li>Student-wise evaluation</li>
-<li>JSON output generation</li>
-<li>PDF report generation</li>
-<li>Summary display</li>
-</ol>
-<h2 id="11-ocr-layer">11. OCR Layer</h2>
-<p>The OCR layer is implemented in <a href="../src/ocr_pipeline.py">src/ocr_pipeline.py</a>.</p>
-<p>Its job is to:</p>
-<ul>
-<li>convert PDFs into images</li>
-<li>run the selected OCR backend</li>
-<li>save page-wise JSON files</li>
-<li>preserve OCR blocks with coordinates and confidence</li>
-</ul>
-<h3 id="11-1-ocr-output-format">11.1 OCR Output Format</h3>
-<p>Each page produces a JSON file like:</p>
-<pre><code class="language-json">{
-  &quot;page&quot;: 1,
-  &quot;text&quot;: &quot;full extracted text&quot;,
-  &quot;blocks&quot;: [
+    <h3>Rubric Field Reference</h3>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>max_marks</code></td><td>Number</td><td>Total marks available for the question</td></tr>
+          <tr><td><code>text_weight</code></td><td>Float 0–1</td><td>Contribution of textual answer quality to final score</td></tr>
+          <tr><td><code>diagram_weight</code></td><td>Float 0–1</td><td>Contribution of diagram quality to final score</td></tr>
+          <tr><td><code>formula_weight</code></td><td>Float 0–1</td><td>Contribution of formula correctness to final score</td></tr>
+          <tr><td><code>penalize_missing_diagram</code></td><td>Boolean</td><td>Whether missing diagram reduces marks to zero for that modality</td></tr>
+          <tr><td><code>penalize_missing_formula</code></td><td>Boolean</td><td>Whether missing formula reduces marks to zero for that modality</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 9. Workflow -->
+    <div id="workflow" class="section-divider">
+      <div class="section-number">9</div>
+      <h2>End-to-End Workflow</h2>
+      <div class="section-line"></div>
+    </div>
+
+    <div class="diagram-wrapper">
+      <div class="diagram-label">Complete Evaluation Workflow — Top-to-Bottom</div>
+      <div class="mermaid">flowchart TD
+    A["Upload ideal PDF"] --> D["Validate inputs"]
+    B["Upload rubric JSON"] --> D
+    C["Upload student PDFs"] --> D
+    D --> E["Write rubric to working path"]
+    E --> F["OCR ideal answer sheet"]
+    F --> G["OCR student answer sheets"]
+    G --> H["Formula extraction — SBERT mode"]
+    H --> I["Diagram extraction"]
+    I --> J["Evaluate each student answer"]
+    J --> K["Save evaluation JSON"]
+    K --> L["Generate PDF reports"]
+    L --> M["Show ranking table and downloads"]</div>
+    </div>
+
+    <h3>Workflow Stages</h3>
+    <ol>
+      <li><strong>Input validation</strong> — verify all three required files are present</li>
+      <li><strong>OCR on ideal answer sheet</strong> — extract ground-truth text and layouts</li>
+      <li><strong>OCR on each student sheet</strong> — extract per-page text blocks</li>
+      <li><strong>Formula extraction</strong> — isolate math regions and convert to LaTeX (SBERT mode)</li>
+      <li><strong>Diagram extraction</strong> — connected-component based visual isolation</li>
+      <li><strong>Student-wise evaluation</strong> — compare all modalities against ideal</li>
+      <li><strong>JSON output generation</strong> — structured per-student result files</li>
+      <li><strong>PDF report generation</strong> — faculty-friendly individual reports</li>
+      <li><strong>Summary display</strong> — ranking table and download links</li>
+    </ol>
+
+    <!-- 10. OCR Layer -->
+    <div id="ocr" class="section-divider">
+      <div class="section-number">10</div>
+      <h2>OCR Layer</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Implemented in <code>src/ocr_pipeline.py</code>. Converts PDFs to images, runs the selected OCR backend, and saves page-wise JSON files with bounding boxes and confidence scores.</p>
+
+    <h3>OCR Output Format</h3>
+    <pre data-lang="JSON"><code>{
+  "page": 1,
+  "text": "full extracted text",
+  "blocks": [
     {
-      &quot;bbox&quot;: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]],
-      &quot;text&quot;: &quot;block text&quot;,
-      &quot;confidence&quot;: 0.92
+      "bbox": [[x1,y1],[x2,y2],[x3,y3],[x4,y4]],
+      "text": "block text",
+      "confidence": 0.92
     }
   ]
-}
-</code></pre>
-<h3 id="11-2-easyocr-path">11.2 EasyOCR Path</h3>
-<p>EasyOCR is used for printed or cleaner answer sheets.</p>
-<p>Processing steps:</p>
-<ol>
-<li>Convert PDF pages to images using <code>pdf2image</code>.</li>
-<li>Convert PIL image to NumPy array.</li>
-<li>Run EasyOCR reader on the page.</li>
-<li>Save text blocks and full page text as JSON.</li>
-</ol>
-<p>Advantages:</p>
-<ul>
-<li>local execution</li>
-<li>no API billing for OCR</li>
-<li>useful for research testing and printed sheets</li>
-</ul>
-<p>Limitations:</p>
-<ul>
-<li>not ideal for very messy handwriting</li>
-</ul>
-<h3 id="11-3-google-vision-ai-path">11.3 Google Vision AI Path</h3>
-<p>Google Vision AI is used as a handwriting-aware OCR backend.</p>
-<p>Processing steps:</p>
-<ol>
-<li>Convert PDF pages to images.</li>
-<li>Compress pages to fit Google Vision request limits.</li>
-<li>Call <code>document_text_detection</code>.</li>
-<li>Extract paragraph or word blocks with bounding boxes.</li>
-<li>Save page-wise OCR JSON.</li>
-</ol>
-<p>Important implementation points:</p>
-<ul>
-<li>uses Google Application Default Credentials</li>
-<li>supports language hints such as handwriting-oriented English hints</li>
-<li>designed for better handwritten OCR than local EasyOCR in many cases</li>
-</ul>
-<h3 id="11-4-azure-document-intelligence-path">11.4 Azure Document Intelligence Path</h3>
-<p>Azure Document Intelligence is another handwritten OCR path.</p>
-<p>Processing steps:</p>
-<ol>
-<li>Convert PDF pages into images.</li>
-<li>Compress pages to fit Azure request limits.</li>
-<li>Call <code>prebuilt-read</code>.</li>
-<li>Extract line or word content with polygon coordinates.</li>
-<li>Save OCR results as JSON.</li>
-</ol>
-<p>Important requirement:</p>
-<ul>
-<li>needs endpoint and key</li>
-</ul>
-<h3 id="11-5-document-ai-support">11.5 Document AI Support</h3>
-<p>The OCR module also includes a Google Document AI path for processor-based experiments, though the main active handwritten workflows are Google Vision AI and Azure Document Intelligence.</p>
-<h2 id="12-diagram-extraction">12. Diagram Extraction</h2>
-<p>Diagram extraction is implemented in <a href="../src/diagram_extractor.py">src/diagram_extractor.py</a>.</p>
-<h3 id="12-1-why-diagram-extraction-is-needed">12.1 Why Diagram Extraction Is Needed</h3>
-<p>Many answer sheets contain figures or circuit-style diagrams that cannot be judged purely through text OCR. If diagrams are mixed into raw OCR text, evaluation becomes noisy and unfair.</p>
-<p>The project therefore separates diagrams from text and evaluates them independently.</p>
-<h3 id="12-2-method-used">12.2 Method Used</h3>
-<p>The current system uses connected-component based extraction:</p>
-<ol>
-<li>Convert page image to grayscale.</li>
-<li>Threshold near-white background to isolate ink.</li>
-<li>Apply morphological closing to join nearby strokes.</li>
-<li>Run <code>connectedComponentsWithStats</code>.</li>
-<li>Filter out small components that are likely just text or noise.</li>
-<li>Prefer components located in lower visual regions of the page.</li>
-<li>Compute a union bounding box.</li>
-<li>Save the cropped diagram as a PNG.</li>
-</ol>
-<h3 id="12-3-output">12.3 Output</h3>
-<p>The output is stored as:</p>
-<pre><code class="language-text">results/diagrams/&lt;BaseName&gt;_page&lt;PageNo&gt;_diagram.png
-</code></pre>
-<h3 id="12-4-advantages">12.4 Advantages</h3>
-<ul>
-<li>lightweight and explainable</li>
-<li>does not require a trained object detector</li>
-<li>works reasonably well for diagram-heavy regions</li>
-</ul>
-<h3 id="12-5-limitations">12.5 Limitations</h3>
-<ul>
-<li>unusual layouts may confuse the region detector</li>
-<li>diagrams mixed tightly with text can be harder to isolate</li>
-</ul>
-<h2 id="13-formula-extraction-and-formula-ocr">13. Formula Extraction and Formula OCR</h2>
-<p>Formula extraction is implemented in <a href="../src/formula_pipeline.py">src/formula_pipeline.py</a>.</p>
-<h3 id="13-1-purpose">13.1 Purpose</h3>
-<p>Mathematical expressions should not be treated as ordinary text because OCR noise can make direct string comparison unreliable. This module isolates formula-like lines and converts them into LaTeX for symbolic analysis.</p>
-<h3 id="13-2-processing-steps">13.2 Processing Steps</h3>
-<ol>
-<li>Read page-wise OCR blocks.</li>
-<li>Convert each OCR block bounding box into rectangular regions.</li>
-<li>Group nearby blocks into line candidates.</li>
-<li>Detect whether a line looks formula-like.</li>
-<li>Crop the formula region with padding.</li>
-<li>Run <code>pix2tex</code> to convert the crop into LaTeX.</li>
-<li>Save page-wise formula JSON.</li>
-</ol>
-<h3 id="13-3-formula-detection-heuristics">13.3 Formula Detection Heuristics</h3>
-<p>The <code>_looks_formula_like()</code> function checks patterns such as:</p>
-<ul>
-<li>math operators like <code>=</code>, <code>+</code>, <code>*</code>, <code>^</code></li>
-<li>fraction-like patterns</li>
-<li>trig or calculus keywords such as <code>sin</code>, <code>cos</code>, <code>log</code>, <code>lim</code>, <code>dx</code></li>
-<li>symbolic density</li>
-<li>equation-like alpha-numeric patterns</li>
-</ul>
-<h3 id="13-4-formula-output">13.4 Formula Output</h3>
-<p>Each page stores output like:</p>
-<pre><code class="language-json">{
-  &quot;page&quot;: 1,
-  &quot;formula_count&quot;: 2,
-  &quot;formulas&quot;: [
+}</code></pre>
+
+    <h3>OCR Backend Comparison</h3>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr><th>Backend</th><th>Best For</th><th>Deployment</th><th>Handwriting</th><th>Requirement</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>EasyOCR</strong></td>
+            <td>Printed / clean sheets</td>
+            <td>Local (no API)</td>
+            <td>Limited</td>
+            <td>None — runs locally</td>
+          </tr>
+          <tr>
+            <td><strong>Google Vision AI</strong></td>
+            <td>Handwritten sheets</td>
+            <td>Cloud API</td>
+            <td>Excellent</td>
+            <td>Google Application Default Credentials</td>
+          </tr>
+          <tr>
+            <td><strong>Azure Document Intelligence</strong></td>
+            <td>Handwritten sheets</td>
+            <td>Cloud API</td>
+            <td>Excellent</td>
+            <td>Endpoint + API Key</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>EasyOCR Processing Steps</h3>
+    <ol>
+      <li>Convert PDF pages to images using <code>pdf2image</code>.</li>
+      <li>Convert PIL image to NumPy array.</li>
+      <li>Run EasyOCR <code>reader</code> on the page.</li>
+      <li>Save text blocks and full page text as JSON.</li>
+    </ol>
+
+    <h3>Google Vision AI Processing Steps</h3>
+    <ol>
+      <li>Convert PDF pages to images.</li>
+      <li>Compress pages to fit Vision API request limits.</li>
+      <li>Call <code>document_text_detection</code>.</li>
+      <li>Extract paragraph/word blocks with bounding boxes.</li>
+      <li>Save page-wise OCR JSON.</li>
+    </ol>
+
+    <h3>Azure Document Intelligence Steps</h3>
+    <ol>
+      <li>Convert PDF pages to images.</li>
+      <li>Compress to fit Azure request limits.</li>
+      <li>Call <code>prebuilt-read</code> model.</li>
+      <li>Extract line/word content with polygon coordinates.</li>
+      <li>Save OCR results as JSON.</li>
+    </ol>
+
+    <!-- 11. Diagram Extraction -->
+    <div id="diagrams" class="section-divider">
+      <div class="section-number">11</div>
+      <h2>Diagram Extraction</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Implemented in <code>src/diagram_extractor.py</code>. Many answer sheets contain figures or circuit-style diagrams that cannot be judged through text OCR alone. The project separates diagrams from text and evaluates them independently.</p>
+
+    <h3>Connected-Component Method</h3>
+    <div class="diagram-wrapper">
+      <div class="diagram-label">Diagram Extraction Pipeline</div>
+      <div class="mermaid">flowchart LR
+    A["Page Image"] --> B["Convert to Grayscale"]
+    B --> C["Threshold — isolate ink"]
+    C --> D["Morphological Closing\njoin nearby strokes"]
+    D --> E["connectedComponentsWithStats"]
+    E --> F["Filter small components\ntext & noise removal"]
+    F --> G["Prefer lower-region components"]
+    G --> H["Compute union bounding box"]
+    H --> I["Save cropped PNG\nresults/diagrams/"]</div>
+    </div>
+
+    <h3>Output Path</h3>
+    <pre data-lang="path"><code>results/diagrams/&lt;BaseName&gt;_page&lt;PageNo&gt;_diagram.png</code></pre>
+
+    <div class="callout callout-info">
+      <span class="callout-icon">ℹ</span>
+      <div class="callout-content"><strong>Advantages:</strong> Lightweight and explainable — no trained object detector required. Works well for diagram-heavy lower regions of a page.<br/><strong>Limitations:</strong> Unusual layouts or closely integrated text-diagram areas can reduce accuracy.</div>
+    </div>
+
+    <!-- 12. Formula Extraction -->
+    <div id="formulas" class="section-divider">
+      <div class="section-number">12</div>
+      <h2>Formula Extraction & OCR</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Implemented in <code>src/formula_pipeline.py</code>. Mathematical expressions should not be treated as ordinary text because OCR noise makes direct string comparison unreliable. This module isolates formula-like lines and converts them to LaTeX for symbolic analysis.</p>
+
+    <h3>Processing Steps</h3>
+    <ol>
+      <li>Read page-wise OCR blocks.</li>
+      <li>Convert each OCR block bounding box into rectangular regions.</li>
+      <li>Group nearby blocks into line candidates.</li>
+      <li>Detect whether a line looks formula-like (<code>_looks_formula_like()</code>).</li>
+      <li>Crop the formula region with padding.</li>
+      <li>Run <code>pix2tex</code> to convert the crop into LaTeX.</li>
+      <li>Save page-wise formula JSON.</li>
+    </ol>
+
+    <h3>Formula Detection Heuristics</h3>
+    <p>The <code>_looks_formula_like()</code> function checks for patterns such as:</p>
+    <ul>
+      <li>Math operators: <code>=</code>, <code>+</code>, <code>*</code>, <code>^</code></li>
+      <li>Fraction-like patterns</li>
+      <li>Trig/calculus keywords: <code>sin</code>, <code>cos</code>, <code>log</code>, <code>lim</code>, <code>dx</code></li>
+      <li>High symbolic density</li>
+      <li>Equation-like alphanumeric patterns</li>
+    </ul>
+
+    <h3>Formula Output Format</h3>
+    <pre data-lang="JSON"><code>{
+  "page": 1,
+  "formula_count": 2,
+  "formulas": [
     {
-      &quot;index&quot;: 1,
-      &quot;bbox&quot;: [x1, y1, x2, y2],
-      &quot;ocr_text&quot;: &quot;E = mc^2&quot;,
-      &quot;latex&quot;: &quot;E=mc^2&quot;,
-      &quot;crop_path&quot;: &quot;...&quot;,
-      &quot;error&quot;: &quot;&quot;
+      "index": 1,
+      "bbox": [x1, y1, x2, y2],
+      "ocr_text": "E = mc^2",
+      "latex": "E=mc^2",
+      "crop_path": "results/formula_crops/...",
+      "error": ""
     }
   ]
-}
-</code></pre>
-<h3 id="13-5-crop-storage">13.5 Crop Storage</h3>
-<p>Formula image crops are stored under:</p>
-<pre><code class="language-text">results/formula_crops/
-</code></pre>
-<h2 id="14-formula-evaluation">14. Formula Evaluation</h2>
-<p>Formula comparison is implemented in <a href="../src/formula_evaluator.py">src/formula_evaluator.py</a>.</p>
-<h3 id="14-1-why-symbolic-evaluation-is-important">14.1 Why Symbolic Evaluation Is Important</h3>
-<p>Two formulas may be mathematically equivalent but look different as strings. For example:</p>
-<ul>
-<li><code>a/b</code></li>
-<li><code>\\frac{a}{b}</code></li>
-<li>algebraically rearranged equivalent forms</li>
-</ul>
-<p>A formula-aware evaluator must check equivalence, not just string similarity.</p>
-<h3 id="14-2-processing-logic">14.2 Processing Logic</h3>
-<ol>
-<li>Normalize LaTeX-like strings.</li>
-<li>Convert formula text into a SymPy-friendly format when needed.</li>
-<li>Try parsing with:<ul>
-<li><code>sympy.parsing.latex.parse_latex</code></li>
-<li>fallback <code>parse_expr</code></li>
-</ul>
-</li>
-<li>Check equivalence using:<ul>
-<li>symbolic simplification</li>
-<li>equality checks</li>
-<li>fallback string similarity</li>
-</ul>
-</li>
-</ol>
-<h3 id="14-3-scoring-strategy">14.3 Scoring Strategy</h3>
-<p>Formula scoring returns:</p>
-<ul>
-<li><code>1.0</code> for exact or equivalent formulas</li>
-<li>partial scores for close but imperfect matches</li>
-<li><code>0.0</code> for incorrect or missing required formulas</li>
-</ul>
-<h3 id="14-4-feedback">14.4 Feedback</h3>
-<p>The formula evaluator also returns short explanations such as:</p>
-<ul>
-<li>exact match</li>
-<li>mathematically equivalent</li>
-<li>partially correct</li>
-<li>missing formula</li>
-<li>substantially different formula</li>
-</ul>
-<h2 id="15-text-and-diagram-evaluation-with-sbert">15. Text and Diagram Evaluation with SBERT</h2>
-<p>The local evaluation engine is implemented in <a href="../src/evaluation_core.py">src/evaluation_core.py</a>.</p>
-<h3 id="15-1-purpose">15.1 Purpose</h3>
-<p>This is the primary local research evaluation path. It combines:</p>
-<ul>
-<li>semantic text similarity</li>
-<li>diagram similarity</li>
-<li>formula similarity</li>
-</ul>
-<h3 id="15-2-text-evaluation">15.2 Text Evaluation</h3>
-<p>Text evaluation uses:</p>
-<ul>
-<li>Sentence Transformers</li>
-<li>model: <code>sentence-transformers/all-MiniLM-L6-v2</code></li>
-</ul>
-<p>The model converts the ideal and student answers into embeddings and computes cosine similarity.</p>
-<p>This allows the system to judge whether the student answer is semantically close to the ideal answer, even if exact wording differs.</p>
-<h3 id="15-3-text-similarity-mapping">15.3 Text Similarity Mapping</h3>
-<p>The raw cosine similarity is not used directly. Instead, it is mapped into a scoring fraction using a stricter scoring curve.</p>
-<p>Current logic:</p>
-<ul>
-<li>if similarity is less than or equal to <code>0.6</code>, score fraction is <code>0</code></li>
-<li>above that, marks increase linearly up to <code>1.0</code></li>
-</ul>
-<p>This makes the grading stricter than raw cosine similarity.</p>
-<h3 id="15-4-diagram-evaluation">15.4 Diagram Evaluation</h3>
-<p>Diagram evaluation uses:</p>
-<ul>
-<li>CLIP model</li>
-<li>model: <code>openai/clip-vit-base-patch32</code></li>
-</ul>
-<p>The ideal and student diagram images are embedded and compared using cosine similarity.</p>
-<h3 id="15-5-formula-evaluation">15.5 Formula Evaluation</h3>
-<p>Formula evaluation loads extracted formulas page by page and compares them using the symbolic formula evaluator.</p>
-<h3 id="15-6-weight-normalization">15.6 Weight Normalization</h3>
-<p>For each question:</p>
-<ol>
-<li>text, diagram, and formula weights are read from the rubric</li>
-<li>weights are normalized</li>
-<li>each modality contributes proportionally to the final score</li>
-</ol>
-<h3 id="15-7-missing-modality-handling">15.7 Missing Modality Handling</h3>
-<p>The rubric can specify whether missing diagrams or formulas should be penalized.</p>
-<p>If the ideal answer contains a diagram but the student diagram is missing:</p>
-<ul>
-<li>marks can be reduced to zero for that modality</li>
-<li>or the diagram weight can be ignored depending on rubric settings</li>
-</ul>
-<p>The same logic applies to formulas.</p>
-<h3 id="15-8-question-result">15.8 Question Result</h3>
-<p>For each question, the system returns:</p>
-<ul>
-<li>question id</li>
-<li>text similarity</li>
-<li>diagram similarity</li>
-<li>formula similarity</li>
-<li>score</li>
-<li>max marks</li>
-<li>feedback</li>
-</ul>
-<h3 id="15-9-student-result">15.9 Student Result</h3>
-<p>For each student, the system returns:</p>
-<ul>
-<li>student base name</li>
-<li>total score</li>
-<li>total maximum score</li>
-<li>percentage</li>
-<li>list of per-question results</li>
-</ul>
-<h2 id="16-gemini-llm-evaluation-path">16. Gemini LLM Evaluation Path</h2>
-<p>The LLM evaluation engine is implemented in <a href="../src/llm_evaluator.py">src/llm_evaluator.py</a>.</p>
-<h3 id="16-1-purpose">16.1 Purpose</h3>
-<p>The Gemini path provides rubric-aware LLM grading as an alternative evaluation mode.</p>
-<h3 id="16-2-environment-requirement">16.2 Environment Requirement</h3>
-<p>It requires:</p>
-<ul>
-<li><code>GEMINI_API_KEY</code></li>
-</ul>
-<p>The evaluator loads <code>.env</code> values if present and then initializes the Gemini model.</p>
-<h3 id="16-3-model-used">16.3 Model Used</h3>
-<ul>
-<li><code>gemini-2.5-flash</code></li>
-</ul>
-<h3 id="16-4-prompt-strategy">16.4 Prompt Strategy</h3>
-<p>For each question, the evaluator builds a prompt containing:</p>
-<ul>
-<li>question id</li>
-<li>rubric JSON</li>
-<li>ideal answer text</li>
-<li>student answer text</li>
-<li>text and diagram maximum marks</li>
-<li>information about whether ideal and student diagrams are available</li>
-</ul>
-<p>If diagrams exist, the evaluator sends:</p>
-<ul>
-<li>ideal diagram image</li>
-<li>student diagram image</li>
-</ul>
-<p>The model is instructed to return strict JSON with:</p>
-<ul>
-<li><code>text_score</code></li>
-<li><code>diagram_score</code></li>
-<li><code>score</code></li>
-<li><code>max_marks</code></li>
-<li><code>feedback</code></li>
-</ul>
-<h3 id="16-5-safety-handling">16.5 Safety Handling</h3>
-<p>If Gemini fails or returns invalid output:</p>
-<ul>
-<li>the system falls back to zero score for that question</li>
-<li>error details are written into feedback</li>
-</ul>
-<h3 id="16-6-current-role-of-gemini-path">16.6 Current Role of Gemini Path</h3>
-<p>The Gemini mode is useful when:</p>
-<ul>
-<li>a rubric-aware LLM perspective is needed</li>
-<li>a semantic grading path beyond local embeddings is required</li>
-<li>hosted evaluation needs an API-driven scoring engine</li>
-</ul>
-<h2 id="17-pipeline-orchestration">17. Pipeline Orchestration</h2>
-<p>Pipeline orchestration is implemented in <a href="../src/pipeline_service.py">src/pipeline_service.py</a>.</p>
-<h3 id="17-1-main-responsibility">17.1 Main Responsibility</h3>
-<p>This module coordinates the full run:</p>
-<ul>
-<li>write rubric JSON</li>
-<li>configure OCR</li>
-<li>configure diagram extraction</li>
-<li>configure formula extraction</li>
-<li>select evaluator</li>
-<li>generate reports</li>
-<li>publish progress callbacks</li>
-</ul>
-<h3 id="17-2-engine-dependent-flow">17.2 Engine-Dependent Flow</h3>
-<p>If engine is <code>SBERT</code>:</p>
-<ul>
-<li>OCR runs</li>
-<li>formula extraction runs</li>
-<li>diagram extraction runs</li>
-<li>SBERT evaluator runs</li>
-<li>reports are generated in <code>results/reports</code></li>
-</ul>
-<p>If engine is <code>LLM</code>:</p>
-<ul>
-<li>OCR runs</li>
-<li>diagram extraction runs</li>
-<li>Gemini evaluator runs</li>
-<li>reports are generated in <code>results/reports_llm</code></li>
-</ul>
-<h3 id="17-3-progress-tracking">17.3 Progress Tracking</h3>
-<p>The pipeline publishes progress messages such as:</p>
-<ul>
-<li>Running OCR on ideal answer sheet</li>
-<li>Extracting formulas</li>
-<li>Extracting diagrams</li>
-<li>Evaluating student</li>
-<li>Generating report</li>
-</ul>
-<p>This powers the live workflow tracker in the UI.</p>
-<h2 id="18-report-generation">18. Report Generation</h2>
-<p>PDF report generation is implemented in <a href="../src/report_generator.py">src/report_generator.py</a>.</p>
-<h3 id="18-1-purpose">18.1 Purpose</h3>
-<p>To convert evaluation JSON results into faculty-friendly downloadable PDF reports.</p>
-<h3 id="18-2-report-contents">18.2 Report Contents</h3>
-<p>Each report contains:</p>
-<ul>
-<li>student name</li>
-<li>total score</li>
-<li>percentage</li>
-<li>per-question score</li>
-<li>text similarity</li>
-<li>diagram similarity</li>
-<li>formula similarity</li>
-<li>feedback</li>
-</ul>
-<h3 id="18-3-pdf-tool-used">18.3 PDF Tool Used</h3>
-<ul>
-<li><code>fpdf2</code></li>
-</ul>
-<h2 id="19-fastapi-backend">19. FastAPI Backend</h2>
-<p>The backend is implemented in <a href="../backend_api/main.py">backend_api/main.py</a>.</p>
-<h3 id="19-1-role-of-backend">19.1 Role of Backend</h3>
-<p>The FastAPI backend acts as the bridge between the web interface and the evaluation pipeline.</p>
-<p>It handles:</p>
-<ul>
-<li>file uploads</li>
-<li>job creation</li>
-<li>synchronous evaluation</li>
-<li>run history</li>
-<li>report downloads</li>
-<li>runtime configuration</li>
-<li>documentation/team/resource APIs</li>
-</ul>
-<h3 id="19-2-core-backend-endpoints">19.2 Core Backend Endpoints</h3>
-<h4 id="health-endpoints">Health Endpoints</h4>
-<ul>
-<li><code>GET /</code></li>
-<li><code>GET /healthz</code></li>
-<li><code>GET /api/health</code></li>
-</ul>
-<h4 id="informational-endpoints">Informational Endpoints</h4>
-<ul>
-<li><code>GET /api/team</code></li>
-<li><code>GET /api/resources</code></li>
-<li><code>GET /api/documentation</code></li>
-<li><code>GET /api/runtime-config</code></li>
-<li><code>GET /api/research-paper</code></li>
-</ul>
-<h4 id="job-and-run-endpoints">Job and Run Endpoints</h4>
-<ul>
-<li><code>GET /api/jobs</code></li>
-<li><code>GET /api/jobs/{run_id}</code></li>
-<li><code>GET /api/runs/{run_id}</code></li>
-<li><code>GET /api/runs/{run_id}/reports/{report_name}</code></li>
-<li><code>POST /api/jobs</code></li>
-<li><code>POST /api/evaluate</code></li>
-</ul>
-<h3 id="19-3-job-modes">19.3 Job Modes</h3>
-<p>The backend supports two styles:</p>
-<ol>
-<li>Background job mode through <code>/api/jobs</code></li>
-<li>Synchronous full-run evaluation through <code>/api/evaluate</code></li>
-</ol>
-<p>The production architecture intentionally favors the synchronous path for hosted deployment stability.</p>
-<h3 id="19-4-job-metadata">19.4 Job Metadata</h3>
-<p>For each run, metadata such as the following is stored:</p>
-<ul>
-<li>run id</li>
-<li>status</li>
-<li>engine</li>
-<li>OCR backend</li>
-<li>student count</li>
-<li>created time</li>
-<li>start time</li>
-<li>completion time</li>
-<li>current step</li>
-<li>total steps</li>
-<li>progress percent</li>
-<li>events timeline</li>
-<li>error message</li>
-<li>report directory</li>
-<li>evaluation directory</li>
-<li>summary rows</li>
-</ul>
-<h3 id="19-5-backend-settings">19.5 Backend Settings</h3>
-<p>Backend configuration is read by <a href="../backend_api/settings.py">backend_api/settings.py</a>.</p>
-<p>It loads:</p>
-<ul>
-<li>allowed origins</li>
-<li>API runs root</li>
-<li>README path</li>
-<li>EasyOCR GPU setting</li>
-<li>Google Vision language hints</li>
-<li>Azure credentials</li>
-<li>Gemini API presence</li>
-</ul>
-<h2 id="20-streamlit-interface">20. Streamlit Interface</h2>
-<p>The research-facing interface is implemented in <a href="../src/app.py">src/app.py</a>.</p>
-<h3 id="20-1-purpose">20.1 Purpose</h3>
-<p>Streamlit provides a fast experimentation and demonstration interface for:</p>
-<ul>
-<li>uploading files</li>
-<li>running local evaluations</li>
-<li>observing workflow progress</li>
-<li>showing ranking tables</li>
-<li>downloading reports</li>
-</ul>
-<h3 id="20-2-main-tabs-and-sections">20.2 Main Tabs and Sections</h3>
-<p>The Streamlit app includes:</p>
-<ul>
-<li>Home</li>
-<li>Evaluate</li>
-<li>Documentation</li>
-<li>Team</li>
-<li>Research Paper</li>
-<li>Resources</li>
-</ul>
-<h3 id="20-3-role-in-the-project">20.3 Role in the Project</h3>
-<p>The Streamlit UI is especially useful for:</p>
-<ul>
-<li>BTP demonstrations</li>
-<li>local testing</li>
-<li>pipeline research</li>
-<li>comparing OCR or evaluation settings</li>
-</ul>
-<h2 id="21-next-js-web-interface">21. Next.js Web Interface</h2>
-<p>The product-style web interface is implemented in the <code>web/</code> directory.</p>
-<h3 id="21-1-frontend-stack">21.1 Frontend Stack</h3>
-<ul>
-<li>Next.js 15</li>
-<li>React 19</li>
-<li>TypeScript</li>
-<li>React Markdown</li>
-</ul>
-<h3 id="21-2-current-main-web-sections">21.2 Current Main Web Sections</h3>
-<ul>
-<li>Home</li>
-<li>Evaluate</li>
-<li>Documentation</li>
-<li>Team</li>
-</ul>
-<h3 id="21-3-web-evaluation-page">21.3 Web Evaluation Page</h3>
-<p>The evaluation page is implemented in <a href="../web/app/evaluate/page.tsx">web/app/evaluate/page.tsx</a>.</p>
-<p>It supports:</p>
-<ul>
-<li>file uploads</li>
-<li>rubric sample download</li>
-<li>evaluation engine selection</li>
-<li>OCR backend selection</li>
-<li>live workflow tracking</li>
-<li>recent run history</li>
-<li>summary tables</li>
-<li>report downloads</li>
-</ul>
-<h3 id="21-4-documentation-page">21.4 Documentation Page</h3>
-<p>The documentation page is implemented in <a href="../web/app/documentation/page.tsx">web/app/documentation/page.tsx</a>.</p>
-<p>It provides a clean report-style view for methodology, workflow, tools, and outputs.</p>
-<h3 id="21-5-api-base-handling">21.5 API Base Handling</h3>
-<p>API URL handling is implemented in <a href="../web/lib/api.ts">web/lib/api.ts</a>.</p>
-<p>Important behavior:</p>
-<ul>
-<li>local development uses localhost API URLs when environment variables are set</li>
-<li>production uses the configured cloud backend URL</li>
-</ul>
-<h2 id="22-results-and-output-directories">22. Results and Output Directories</h2>
-<p>The project stores outputs in structured folders:</p>
-<h3 id="22-1-ocr-outputs">22.1 OCR Outputs</h3>
-<pre><code class="language-text">results/ocr/
-</code></pre>
-<p>Stores page-wise OCR JSON.</p>
-<h3 id="22-2-diagram-outputs">22.2 Diagram Outputs</h3>
-<pre><code class="language-text">results/diagrams/
-</code></pre>
-<p>Stores cropped diagram images.</p>
-<h3 id="22-3-formula-outputs">22.3 Formula Outputs</h3>
-<pre><code class="language-text">results/formulas/
-</code></pre>
-<p>Stores page-wise formula JSON.</p>
-<h3 id="22-4-formula-crop-outputs">22.4 Formula Crop Outputs</h3>
-<pre><code class="language-text">results/formula_crops/
-</code></pre>
-<p>Stores formula crop images used by pix2tex.</p>
-<h3 id="22-5-evaluation-outputs">22.5 Evaluation Outputs</h3>
-<pre><code class="language-text">results/eval/
-results/eval_llm/
-</code></pre>
-<p>Stores per-student evaluation JSON for SBERT and Gemini modes.</p>
-<h3 id="22-6-report-outputs">22.6 Report Outputs</h3>
-<pre><code class="language-text">results/reports/
-results/reports_llm/
-</code></pre>
-<p>Stores PDF reports for SBERT and Gemini modes.</p>
-<h2 id="23-deployment-architecture">23. Deployment Architecture</h2>
-<h3 id="23-1-current-production-direction">23.1 Current Production Direction</h3>
-<p>The repository currently documents and supports:</p>
-<ul>
-<li>Next.js frontend on Vercel</li>
-<li>FastAPI backend on Google Cloud Run</li>
-</ul>
-<p>Deployment notes are documented in <a href="../DEPLOY_VERCEL_CLOUD_RUN.md">DEPLOY_VERCEL_CLOUD_RUN.md</a>.</p>
-<h3 id="23-2-why-this-split-is-used">23.2 Why This Split Is Used</h3>
-<ul>
-<li>Vercel is a strong choice for Next.js frontend hosting</li>
-<li>Cloud Run supports a containerized Python backend</li>
-<li>large evaluation workloads fit better in a backend service than in static web hosting</li>
-</ul>
-<h3 id="23-3-docker-backend">23.3 Docker Backend</h3>
-<p>The backend image is defined in <a href="../Dockerfile">Dockerfile</a>.</p>
-<p>Important points:</p>
-<ul>
-<li>base image: <code>python:3.10-slim</code></li>
-<li>installs system dependencies like Poppler and OpenCV runtime libraries</li>
-<li>installs backend-only Python requirements</li>
-<li>exposes port <code>8001</code></li>
-<li>starts FastAPI through <code>start-backend.sh</code></li>
-</ul>
-<h3 id="23-4-backend-startup-script">23.4 Backend Startup Script</h3>
-<p>The startup script is <a href="../start-backend.sh">start-backend.sh</a>.</p>
-<p>It:</p>
-<ul>
-<li>reads <code>PORT</code></li>
-<li>starts <code>uvicorn</code></li>
-<li>binds to <code>0.0.0.0</code></li>
-<li>serves <code>backend_api.main:app</code></li>
-</ul>
-<h3 id="23-5-github-actions">23.5 GitHub Actions</h3>
-<p>The repository also contains an Azure Container Registry build workflow:</p>
-<ul>
-<li><a href="../.github/workflows/backend-acr.yml">.github/workflows/backend-acr.yml</a></li>
-</ul>
-<p>This builds and pushes the backend container image to ACR using GitHub Actions.</p>
-<h2 id="24-environment-variables">24. Environment Variables</h2>
-<p>The current deployment example is provided in <a href="../.env.production.example">.env.production.example</a>.</p>
-<h3 id="24-1-common-backend-variables">24.1 Common Backend Variables</h3>
-<ul>
-<li><code>ALLOWED_ORIGINS</code></li>
-<li><code>API_RUNS_ROOT</code></li>
-<li><code>POPPLER_PATH</code></li>
-<li><code>EASYOCR_USE_GPU</code></li>
-<li><code>GEMINI_API_KEY</code></li>
-<li><code>AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT</code></li>
-<li><code>AZURE_DOCUMENT_INTELLIGENCE_KEY</code></li>
-</ul>
-<h3 id="24-2-google-vision-requirements">24.2 Google Vision Requirements</h3>
-<p>Google Vision uses:</p>
-<ul>
-<li>Google Application Default Credentials</li>
-</ul>
-<p>This usually means:</p>
-<ul>
-<li>local login using <code>gcloud auth application-default login</code></li>
-<li>or deployment with a service account that has Vision API access</li>
-</ul>
-<h3 id="24-3-frontend-variables">24.3 Frontend Variables</h3>
-<p>For local or deployment use, the frontend can rely on:</p>
-<ul>
-<li><code>NEXT_PUBLIC_API_BASE_URL</code></li>
-<li><code>BACKEND_API_BASE_URL</code></li>
-</ul>
-<h2 id="25-local-execution-commands">25. Local Execution Commands</h2>
-<h3 id="25-1-streamlit">25.1 Streamlit</h3>
-<pre><code class="language-powershell">.venv\Scripts\python.exe -m streamlit run src\app.py
-</code></pre>
-<h3 id="25-2-fastapi-backend">25.2 FastAPI Backend</h3>
-<pre><code class="language-powershell">.venv\Scripts\python.exe -m uvicorn backend_api.main:app --reload --port 8001
-</code></pre>
-<h3 id="25-3-next-js-frontend">25.3 Next.js Frontend</h3>
-<pre><code class="language-powershell">cd web
-npm install
-npm run dev
-</code></pre>
-<h3 id="25-4-helper-scripts">25.4 Helper Scripts</h3>
-<p>The repository also includes helper batch files:</p>
-<ul>
-<li><code>run_all_local.cmd</code></li>
-<li><code>run_api_8001.cmd</code></li>
-<li><code>run_streamlit_8502.cmd</code></li>
-<li><code>run_web_3100.cmd</code></li>
-</ul>
-<h2 id="26-tools-and-libraries-used">26. Tools and Libraries Used</h2>
-<p>Below is the main toolset used in the project, along with their role and reference links.</p>
-<table>
-<thead>
-<tr>
-  <th>Layer</th>
-  <th>Tool / Library</th>
-  <th>Purpose</th>
-  <th>Link</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-  <td>Language</td>
-  <td>Python</td>
-  <td>Core pipeline, backend, OCR, evaluation</td>
-  <td><a href="https://www.python.org/">python.org</a></td>
-</tr>
-<tr>
-  <td>Research UI</td>
-  <td>Streamlit</td>
-  <td>Local testing and research dashboard</td>
-  <td><a href="https://streamlit.io/">streamlit.io</a></td>
-</tr>
-<tr>
-  <td>Backend API</td>
-  <td>FastAPI</td>
-  <td>Uploads, runs, reports, API routes</td>
-  <td><a href="https://fastapi.tiangolo.com/">fastapi.tiangolo.com</a></td>
-</tr>
-<tr>
-  <td>API Server</td>
-  <td>Uvicorn</td>
-  <td>ASGI server for FastAPI</td>
-  <td><a href="https://www.uvicorn.org/">uvicorn.org</a></td>
-</tr>
-<tr>
-  <td>Web Frontend</td>
-  <td>Next.js</td>
-  <td>Product-style web interface</td>
-  <td><a href="https://nextjs.org/">nextjs.org</a></td>
-</tr>
-<tr>
-  <td>Frontend UI</td>
-  <td>React</td>
-  <td>Web component layer</td>
-  <td><a href="https://react.dev/">react.dev</a></td>
-</tr>
-<tr>
-  <td>OCR</td>
-  <td>EasyOCR</td>
-  <td>Printed and clean-sheet OCR</td>
-  <td><a href="https://github.com/JaidedAI/EasyOCR">GitHub</a></td>
-</tr>
-<tr>
-  <td>OCR</td>
-  <td>Google Vision AI</td>
-  <td>Handwritten OCR and cloud text extraction</td>
-  <td><a href="https://cloud.google.com/vision">Google Cloud Vision</a></td>
-</tr>
-<tr>
-  <td>OCR</td>
-  <td>Azure Document Intelligence</td>
-  <td>Handwritten OCR alternative</td>
-  <td><a href="https://azure.microsoft.com/en-us/products/ai-services/ai-document-intelligence">Azure Document Intelligence</a></td>
-</tr>
-<tr>
-  <td>PDF Processing</td>
-  <td>pdf2image</td>
-  <td>Convert PDF pages into images</td>
-  <td><a href="https://github.com/Belval/pdf2image">GitHub</a></td>
-</tr>
-<tr>
-  <td>Image Processing</td>
-  <td>OpenCV</td>
-  <td>Diagram extraction and image operations</td>
-  <td><a href="https://opencv.org/">opencv.org</a></td>
-</tr>
-<tr>
-  <td>Image Processing</td>
-  <td>Pillow</td>
-  <td>Image loading and conversions</td>
-  <td><a href="https://python-pillow.org/">python-pillow.org</a></td>
-</tr>
-<tr>
-  <td>Semantic Scoring</td>
-  <td>Sentence Transformers</td>
-  <td>Text similarity using MiniLM</td>
-  <td><a href="https://www.sbert.net/">sbert.net</a></td>
-</tr>
-<tr>
-  <td>Visual Scoring</td>
-  <td>CLIP</td>
-  <td>Diagram image similarity</td>
-  <td><a href="https://github.com/openai/CLIP">GitHub</a></td>
-</tr>
-<tr>
-  <td>Formula OCR</td>
-  <td>pix2tex</td>
-  <td>Equation image to LaTeX</td>
-  <td><a href="https://github.com/lukas-blecher/LaTeX-OCR">GitHub</a></td>
-</tr>
-<tr>
-  <td>Symbolic Math</td>
-  <td>SymPy</td>
-  <td>Formula parsing and equivalence</td>
-  <td><a href="https://www.sympy.org/">sympy.org</a></td>
-</tr>
-<tr>
-  <td>LLM Scoring</td>
-  <td>Gemini 2.5 Flash</td>
-  <td>Rubric-aware LLM evaluation</td>
-  <td><a href="https://ai.google.dev/gemini-api/docs">Gemini API Docs</a></td>
-</tr>
-<tr>
-  <td>PDF Reports</td>
-  <td>FPDF2</td>
-  <td>Student report generation</td>
-  <td><a href="https://py-pdf.github.io/fpdf2/">FPDF2 Docs</a></td>
-</tr>
-<tr>
-  <td>Containerization</td>
-  <td>Docker</td>
-  <td>Backend deployment image</td>
-  <td><a href="https://www.docker.com/">docker.com</a></td>
-</tr>
-<tr>
-  <td>Hosting</td>
-  <td>Vercel</td>
-  <td>Next.js deployment</td>
-  <td><a href="https://vercel.com/">vercel.com</a></td>
-</tr>
-<tr>
-  <td>Hosting</td>
-  <td>Google Cloud Run</td>
-  <td>Containerized backend deployment</td>
-  <td><a href="https://cloud.google.com/run">cloud.google.com/run</a></td>
-</tr>
-<tr>
-  <td>CI/CD</td>
-  <td>GitHub Actions</td>
-  <td>Build and push automation</td>
-  <td><a href="https://docs.github.com/en/actions">GitHub Actions</a></td>
-</tr>
-</tbody>
-</table>
-<h2 id="27-sample-data-flow">27. Sample Data Flow</h2>
-<p>To understand the system practically, one run behaves like this:</p>
-<ol>
-<li>Upload <code>Ideal Answer Sheet.pdf</code></li>
-<li>Upload <code>rubric.json</code></li>
-<li>Upload one or more student PDFs</li>
-<li>Choose <code>SBERT</code> or <code>Gemini</code></li>
-<li>Choose OCR backend:<ul>
-<li>EasyOCR</li>
-<li>Google Vision AI</li>
-<li>Azure Document Intelligence</li>
-</ul>
-</li>
-<li>Run evaluation</li>
-<li>OCR JSON is created</li>
-<li>Diagram and formula outputs are created</li>
-<li>Student answers are compared page by page</li>
-<li>Weighted scores are calculated</li>
-<li>Evaluation JSON and PDF reports are generated</li>
-<li>Final summary table is shown</li>
-</ol>
-<h2 id="28-current-strengths-of-the-project">28. Current Strengths of the Project</h2>
-<ul>
-<li>Multimodal design instead of plain OCR-only grading</li>
-<li>Supports both local and cloud evaluation paths</li>
-<li>Includes handwritten OCR support</li>
-<li>Separates text, diagram, and formula handling</li>
-<li>Uses symbolic math comparison for formulas</li>
-<li>Produces downloadable PDF reports</li>
-<li>Provides both research and product-style interfaces</li>
-</ul>
-<h2 id="29-current-challenges">29. Current Challenges</h2>
-<ul>
-<li>OCR quality remains the biggest bottleneck for complex handwritten content</li>
-<li>Page-to-question mapping is still simplified as one page per question</li>
-<li>Diagram extraction is heuristic-based</li>
-<li>Formula region detection can miss edge cases</li>
-<li>Large hosted runs need careful deployment tuning</li>
-</ul>
-<h2 id="30-future-enhancements">30. Future Enhancements</h2>
-<p>Recommended future improvements include:</p>
-<ol>
-<li>Better question segmentation beyond one-page-one-question assumption</li>
-<li>Stronger handwritten formula recognition</li>
-<li>Diagram object detection instead of only connected components</li>
-<li>Better dashboard analytics and charts</li>
-<li>Cloud storage for long-term report persistence</li>
-<li>Human-in-the-loop override and review mode</li>
-<li>Multi-rubric support for different courses</li>
-<li>Better benchmarking on large answer-sheet datasets</li>
-</ol>
-<h2 id="31-conclusion">31. Conclusion</h2>
-<p>The Automated Subjective Answer Sheet Evaluation System is a research-driven, multimodal answer-sheet evaluation platform designed to handle the real complexity of descriptive academic assessment. Instead of relying only on exact keywords, it combines OCR, semantic similarity, diagram analysis, formula parsing, symbolic math evaluation, rubric-based weighting, and report generation into one connected workflow.</p>
-<p>This makes the project much more realistic and extensible than a simple text-matching prototype. It already demonstrates a strong foundation for an academic BTP project and also forms the base for a future product-grade evaluation platform.</p>
-<h2 id="32-quick-reference">32. Quick Reference</h2>
-<h3 id="core-files">Core Files</h3>
-<ul>
-<li><a href="../src/ocr_pipeline.py">src/ocr_pipeline.py</a></li>
-<li><a href="../src/diagram_extractor.py">src/diagram_extractor.py</a></li>
-<li><a href="../src/formula_pipeline.py">src/formula_pipeline.py</a></li>
-<li><a href="../src/formula_evaluator.py">src/formula_evaluator.py</a></li>
-<li><a href="../src/evaluation_core.py">src/evaluation_core.py</a></li>
-<li><a href="../src/llm_evaluator.py">src/llm_evaluator.py</a></li>
-<li><a href="../src/pipeline_service.py">src/pipeline_service.py</a></li>
-<li><a href="../src/report_generator.py">src/report_generator.py</a></li>
-<li><a href="../src/app.py">src/app.py</a></li>
-<li><a href="../backend_api/main.py">backend_api/main.py</a></li>
-<li><a href="../web/app/evaluate/page.tsx">web/app/evaluate/page.tsx</a></li>
-</ul>
-<h3 id="key-config-files">Key Config Files</h3>
-<ul>
-<li><a href="../rubric.json">rubric.json</a></li>
-<li><a href="../requirements.txt">requirements.txt</a></li>
-<li><a href="../requirements.backend.txt">requirements.backend.txt</a></li>
-<li><a href="../Dockerfile">Dockerfile</a></li>
-<li><a href="../.env.production.example">.env.production.example</a></li>
-</ul>
-<h2 id="33-note-for-future-report-conversion">33. Note for Future Report Conversion</h2>
-<p>This document is intentionally written in a structured report style so it can later be converted into:</p>
-<ul>
-<li>a formal project report</li>
-<li>a project synopsis</li>
-<li>a documentation chapter</li>
-<li>a research paper draft</li>
-</ul>
-<p>You can now reuse this file as the base document for your guide, internal documentation, viva explanation, or final project report.</p>
+}</code></pre>
 
+    <!-- 13. Formula Evaluation -->
+    <div id="formula-eval" class="section-divider">
+      <div class="section-number">13</div>
+      <h2>Formula Evaluation</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Implemented in <code>src/formula_evaluator.py</code>. Two formulas may be mathematically equivalent but look different as strings, e.g. <code>a/b</code> vs <code>\frac{a}{b}</code> vs algebraically rearranged forms. A formula-aware evaluator must check equivalence, not just string similarity.</p>
 
-          <div class="edit-note">
-            <strong>Manual edit file:</strong> this page is served from
-            <code> web/public/project-report.html </code> inside the project. You can open that file
-            directly and update the content manually whenever your report changes.
-          </div>
-        </article>
+    <div class="diagram-wrapper">
+      <div class="diagram-label">Formula Evaluation Logic</div>
+      <div class="mermaid">flowchart TD
+    A["LaTeX String Input"] --> B["Normalize LaTeX-like strings"]
+    B --> C["Try parse_latex\nsympy.parsing.latex"]
+    C --> D{Parse OK?}
+    D -->|Yes| E["Symbolic simplification"]
+    D -->|No| F["Fallback parse_expr"]
+    F --> G["String similarity fallback"]
+    E --> H{Symbolically Equal?}
+    H -->|Yes| I["Score: 1.0\nexact or equivalent"]
+    H -->|No| J["Partial score\nclose but imperfect"]
+    G --> J</div>
+    </div>
+
+    <h3>Scoring Strategy</h3>
+    <ul>
+      <li><code>1.0</code> — exact or symbolically equivalent formulas</li>
+      <li>Partial score — close but imperfect matches (string similarity fallback)</li>
+      <li><code>0.0</code> — incorrect or missing required formulas</li>
+    </ul>
+
+    <h3>Feedback Labels</h3>
+    <div class="endpoint-list">
+      <div class="endpoint-item" style="border-left: 3px solid var(--green);"><span class="method method-get">✓</span><span class="endpoint-path">exact match</span></div>
+      <div class="endpoint-item" style="border-left: 3px solid var(--primary);"><span class="method method-get">≈</span><span class="endpoint-path">mathematically equivalent</span></div>
+      <div class="endpoint-item" style="border-left: 3px solid var(--yellow);"><span class="method method-post">~</span><span class="endpoint-path">partially correct</span></div>
+      <div class="endpoint-item" style="border-left: 3px solid var(--orange);"><span class="method method-post">!</span><span class="endpoint-path">missing formula</span></div>
+      <div class="endpoint-item" style="border-left: 3px solid var(--pink);"><span class="method method-post">✗</span><span class="endpoint-path">substantially different formula</span></div>
+    </div>
+
+    <!-- 14. SBERT Evaluation -->
+    <div id="sbert" class="section-divider">
+      <div class="section-number">14</div>
+      <h2>Text & Diagram Evaluation — SBERT Path</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Implemented in <code>src/evaluation_core.py</code>. The primary local research evaluation path combines semantic text, diagram, and formula similarity.</p>
+
+    <h3>Text Similarity — SBERT</h3>
+    <ul>
+      <li>Model: <code>sentence-transformers/all-MiniLM-L6-v2</code></li>
+      <li>Converts ideal and student answers into embeddings, computes cosine similarity</li>
+      <li>Allows judging semantic closeness even when exact wording differs</li>
+    </ul>
+
+    <h3>Scoring Curve</h3>
+    <div class="score-demo">
+      <p style="font-size:0.82rem; color: var(--text-faint); margin-bottom:18px; text-transform:uppercase; letter-spacing:0.07em; font-weight:700;">Sample Question Score Breakdown (Illustrative)</p>
+      <div class="score-row">
+        <div class="score-label">Text Similarity</div>
+        <div class="score-bar"><div class="score-bar-fill fill-text" style="width:82%"></div></div>
+        <div class="score-val">0.82</div>
       </div>
-    </section>
+      <div class="score-row">
+        <div class="score-label">Diagram Similarity</div>
+        <div class="score-bar"><div class="score-bar-fill fill-diagram" style="width:71%"></div></div>
+        <div class="score-val">0.71</div>
+      </div>
+      <div class="score-row">
+        <div class="score-label">Formula Similarity</div>
+        <div class="score-bar"><div class="score-bar-fill fill-formula" style="width:100%"></div></div>
+        <div class="score-val">1.00</div>
+      </div>
+      <div class="score-row" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+        <div class="score-label"><strong style="color:var(--text)">Weighted Total</strong></div>
+        <div class="score-bar"><div class="score-bar-fill fill-total" style="width:79%"></div></div>
+        <div class="score-val"><strong>7.9</strong></div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <span class="callout-icon">ℹ</span>
+      <div class="callout-content"><strong>Scoring Curve:</strong> Raw cosine similarity is not used directly. If similarity ≤ <code>0.6</code>, score fraction is <code>0</code>. Above that, marks increase linearly to <code>1.0</code>. This makes grading stricter than raw cosine similarity.</div>
+    </div>
+
+    <h3>Diagram Evaluation — CLIP</h3>
+    <ul>
+      <li>Model: <code>openai/clip-vit-base-patch32</code></li>
+      <li>Ideal and student diagram images are embedded and compared by cosine similarity</li>
+    </ul>
+
+    <h3>Weight Normalization</h3>
+    <p>For each question: text, diagram, and formula weights are read from the rubric, normalized, and each modality contributes proportionally to the final score. If the rubric's <code>penalize_missing_diagram</code> is set and the student has no diagram, marks for that modality reduce to zero.</p>
+
+    <!-- 15. Gemini LLM -->
+    <div id="gemini" class="section-divider">
+      <div class="section-number">15</div>
+      <h2>Gemini LLM Evaluation Path</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Implemented in <code>src/llm_evaluator.py</code>. Provides rubric-aware LLM grading as an alternative to local SBERT evaluation.</p>
+
+    <div class="highlight-grid">
+      <div class="highlight-card">
+        <div class="hc-label">Model</div>
+        <div class="hc-value">gemini-2.5-flash</div>
+        <div class="hc-sub">Fast, cost-efficient Gemini model with strong reasoning capabilities.</div>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">Requirement</div>
+        <div class="hc-value">GEMINI_API_KEY</div>
+        <div class="hc-sub">Loaded from <code>.env</code> file or environment variables at runtime.</div>
+      </div>
+    </div>
+
+    <h3>Prompt Strategy</h3>
+    <p>For each question, the evaluator builds a prompt containing: question id, rubric JSON, ideal answer text, student answer text, text and diagram maximum marks, and whether ideal/student diagrams are available. If diagrams exist, the evaluator sends both images alongside the prompt.</p>
+
+    <h3>Expected JSON Response</h3>
+    <pre data-lang="JSON"><code>{
+  "text_score": 7.2,
+  "diagram_score": 3.5,
+  "score": 8.1,
+  "max_marks": 10,
+  "feedback": "Student answer covers key concepts but misses..."
+}</code></pre>
+
+    <div class="callout callout-success">
+      <span class="callout-icon">✓</span>
+      <div class="callout-content"><strong>Safety Handling:</strong> If Gemini fails or returns invalid output, the system falls back to zero score for that question and writes error details into the feedback field — ensuring no silent failures.</div>
+    </div>
+
+    <!-- 16. Pipeline Orchestration -->
+    <div id="pipeline" class="section-divider">
+      <div class="section-number">16</div>
+      <h2>Pipeline Orchestration</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Implemented in <code>src/pipeline_service.py</code>. Coordinates the full run: write rubric JSON, configure OCR / diagram / formula extraction, select evaluator, generate reports, and publish progress callbacks.</p>
+
+    <div class="diagram-wrapper">
+      <div class="diagram-label">Engine-Dependent Flow Branching</div>
+      <div class="mermaid">flowchart TD
+    A["Run Start"] --> B{Engine?}
+    B -->|SBERT| C["OCR runs"]
+    C --> D["Formula extraction runs"]
+    D --> E["Diagram extraction runs"]
+    E --> F["SBERT evaluator runs"]
+    F --> G["Save to results/reports/"]
+    B -->|LLM Gemini| H["OCR runs"]
+    H --> I["Diagram extraction runs"]
+    I --> J["Gemini evaluator runs"]
+    J --> K["Save to results/reports_llm/"]
+    G --> L["Progress callback — done"]
+    K --> L</div>
+    </div>
+
+    <h3>Progress Messages Published</h3>
+    <ul>
+      <li>Running OCR on ideal answer sheet</li>
+      <li>Extracting formulas</li>
+      <li>Extracting diagrams</li>
+      <li>Evaluating student <em>[name]</em></li>
+      <li>Generating report</li>
+    </ul>
+
+    <!-- 17. Report Generation -->
+    <div id="reports" class="section-divider">
+      <div class="section-number">17</div>
+      <h2>Report Generation</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Implemented in <code>src/report_generator.py</code> using <code>fpdf2</code>. Converts evaluation JSON results into faculty-friendly downloadable PDF reports.</p>
+
+    <h3>Report Contents (Per Student)</h3>
+    <div class="highlight-grid">
+      <div class="highlight-card">
+        <div class="hc-label">Identity</div>
+        <div class="hc-value">Student name, total score, percentage</div>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">Per-Question Breakdown</div>
+        <div class="hc-value">Score, max marks, text/diagram/formula similarity</div>
+      </div>
+    </div>
+    <p>Each question entry also includes a natural-language <strong>feedback</strong> string explaining why marks were awarded or deducted.</p>
+
+    <!-- 18. FastAPI Backend -->
+    <div id="fastapi" class="section-divider">
+      <div class="section-number">18</div>
+      <h2>FastAPI Backend</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Implemented in <code>backend_api/main.py</code>. Acts as the bridge between the web interface and the evaluation pipeline — handling file uploads, job creation, synchronous evaluation, run history, report downloads, and runtime configuration.</p>
+
+    <h3>API Endpoints</h3>
+    <h4>Health Endpoints</h4>
+    <div class="endpoint-list">
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/</span><span class="endpoint-desc">Root health check</span></div>
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/healthz</span><span class="endpoint-desc">Kubernetes liveness probe</span></div>
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/api/health</span><span class="endpoint-desc">API health status</span></div>
+    </div>
+    <h4>Informational Endpoints</h4>
+    <div class="endpoint-list">
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/api/team</span><span class="endpoint-desc">Team information</span></div>
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/api/resources</span><span class="endpoint-desc">Project resources</span></div>
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/api/documentation</span><span class="endpoint-desc">Documentation content</span></div>
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/api/runtime-config</span><span class="endpoint-desc">Runtime configuration</span></div>
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/api/research-paper</span><span class="endpoint-desc">Research paper endpoint</span></div>
+    </div>
+    <h4>Job & Run Endpoints</h4>
+    <div class="endpoint-list">
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/api/jobs</span><span class="endpoint-desc">List all jobs</span></div>
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/api/jobs/{run_id}</span><span class="endpoint-desc">Get specific job status</span></div>
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/api/runs/{run_id}</span><span class="endpoint-desc">Get run results</span></div>
+      <div class="endpoint-item"><span class="method method-get">GET</span><span class="endpoint-path">/api/runs/{run_id}/reports/{name}</span><span class="endpoint-desc">Download PDF report</span></div>
+      <div class="endpoint-item"><span class="method method-post">POST</span><span class="endpoint-path">/api/jobs</span><span class="endpoint-desc">Create background job</span></div>
+      <div class="endpoint-item"><span class="method method-post">POST</span><span class="endpoint-path">/api/evaluate</span><span class="endpoint-desc">Run synchronous evaluation</span></div>
+    </div>
+
+    <h3>Job Metadata Stored Per Run</h3>
+    <p>run id, status, engine, OCR backend, student count, created time, start time, completion time, current step, total steps, progress percent, events timeline, error message, report directory, evaluation directory, summary rows.</p>
+
+    <!-- 19. Streamlit -->
+    <div id="streamlit" class="section-divider">
+      <div class="section-number">19</div>
+      <h2>Streamlit Interface</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Implemented in <code>src/app.py</code>. Provides a fast experimentation and demonstration interface for uploading files, running local evaluations, observing workflow progress, showing ranking tables, and downloading reports.</p>
+
+    <h3>Tabs & Sections</h3>
+    <div class="tech-grid">
+      <div class="tech-card"><div class="tech-name">🏠 Home</div><div class="tech-role">Project overview and quick start</div></div>
+      <div class="tech-card"><div class="tech-name">⚡ Evaluate</div><div class="tech-role">File upload + run pipeline</div></div>
+      <div class="tech-card"><div class="tech-name">📚 Documentation</div><div class="tech-role">Methodology overview</div></div>
+      <div class="tech-card"><div class="tech-name">👥 Team</div><div class="tech-role">Project members</div></div>
+      <div class="tech-card"><div class="tech-name">📄 Research Paper</div><div class="tech-role">Academic paper link</div></div>
+      <div class="tech-card"><div class="tech-name">🔗 Resources</div><div class="tech-role">External references</div></div>
+    </div>
+    <pre data-lang="PowerShell"><code>.venv\Scripts\python.exe -m streamlit run src\app.py</code></pre>
+
+    <!-- 20. Next.js -->
+    <div id="nextjs" class="section-divider">
+      <div class="section-number">20</div>
+      <h2>Next.js Web Interface</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>Product-style web interface in the <code>web/</code> directory.</p>
+
+    <div class="highlight-grid">
+      <div class="highlight-card">
+        <div class="hc-label">Stack</div>
+        <div class="hc-value">Next.js 15 + React 19</div>
+        <div class="hc-sub">TypeScript + React Markdown</div>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">API Handling</div>
+        <div class="hc-value">web/lib/api.ts</div>
+        <div class="hc-sub">NEXT_PUBLIC_API_BASE_URL in dev, cloud backend in production</div>
+      </div>
+    </div>
+
+    <h3>Evaluate Page Features</h3>
+    <ul>
+      <li>File uploads (ideal PDF, rubric JSON, student PDFs)</li>
+      <li>Rubric sample download</li>
+      <li>Evaluation engine selection (SBERT / Gemini)</li>
+      <li>OCR backend selection (EasyOCR / Vision AI / Azure)</li>
+      <li>Live workflow tracking via progress callbacks</li>
+      <li>Recent run history</li>
+      <li>Summary tables and per-student report downloads</li>
+    </ul>
+
+    <pre data-lang="PowerShell"><code>cd web
+npm install
+npm run dev</code></pre>
+
+    <!-- 21. Deployment -->
+    <div id="deployment" class="section-divider">
+      <div class="section-number">21</div>
+      <h2>Deployment Architecture</h2>
+      <div class="section-line"></div>
+    </div>
+
+    <div class="diagram-wrapper">
+      <div class="diagram-label">Production Deployment Architecture</div>
+      <div class="mermaid">flowchart LR
+    U["End User\nbrowser"] --> V["Vercel\nNext.js Frontend"]
+    V --> W["Google Cloud Run\nFastAPI Backend"]
+    W --> X["Pipeline & Models\nSBERT / CLIP / pix2tex"]
+    W --> Y["Cloud OCR APIs\nGoogle Vision / Azure"]
+    W --> Z["Gemini API\nGemini 2.5 Flash"]</div>
+    </div>
+
+    <h3>Docker Backend — Key Points</h3>
+    <ul>
+      <li>Base image: <code>python:3.10-slim</code></li>
+      <li>Installs system dependencies: Poppler, OpenCV runtime libraries</li>
+      <li>Installs backend-only Python requirements (<code>requirements.backend.txt</code>)</li>
+      <li>Exposes port <code>8001</code></li>
+      <li>Starts FastAPI via <code>start-backend.sh</code> → <code>uvicorn backend_api.main:app</code></li>
+    </ul>
+
+    <h3>Helper Scripts</h3>
+    <ul>
+      <li><code>run_all_local.cmd</code> — start all three services at once</li>
+      <li><code>run_api_8001.cmd</code> — start FastAPI backend</li>
+      <li><code>run_streamlit_8502.cmd</code> — start Streamlit UI</li>
+      <li><code>run_web_3100.cmd</code> — start Next.js frontend</li>
+    </ul>
+
+    <!-- 22. Environment Variables -->
+    <div id="env" class="section-divider">
+      <div class="section-number">22</div>
+      <h2>Environment Variables</h2>
+      <div class="section-line"></div>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr><th>Variable</th><th>Required For</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>ALLOWED_ORIGINS</code></td><td>Backend</td><td>CORS allowed origins for the API</td></tr>
+          <tr><td><code>API_RUNS_ROOT</code></td><td>Backend</td><td>Root directory for storing run artifacts</td></tr>
+          <tr><td><code>POPPLER_PATH</code></td><td>Backend</td><td>Path to Poppler binaries for pdf2image</td></tr>
+          <tr><td><code>EASYOCR_USE_GPU</code></td><td>Backend</td><td>Enable GPU for EasyOCR if available</td></tr>
+          <tr><td><code>GEMINI_API_KEY</code></td><td>LLM Path</td><td>Google Gemini API key</td></tr>
+          <tr><td><code>AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT</code></td><td>Azure OCR</td><td>Azure DI service endpoint URL</td></tr>
+          <tr><td><code>AZURE_DOCUMENT_INTELLIGENCE_KEY</code></td><td>Azure OCR</td><td>Azure DI API key</td></tr>
+          <tr><td><code>NEXT_PUBLIC_API_BASE_URL</code></td><td>Frontend</td><td>API base URL for browser-side calls</td></tr>
+          <tr><td><code>BACKEND_API_BASE_URL</code></td><td>Frontend</td><td>API base URL for server-side calls</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-info">
+      <span class="callout-icon">ℹ</span>
+      <div class="callout-content"><strong>Google Vision:</strong> Uses Google Application Default Credentials — local login via <code>gcloud auth application-default login</code>, or a service account with Vision API access in deployment.</div>
+    </div>
+
+    <!-- 23. Tools & Libraries -->
+    <div id="tools" class="section-divider">
+      <div class="section-number">23</div>
+      <h2>Tools & Libraries</h2>
+      <div class="section-line"></div>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr><th>Layer</th><th>Tool / Library</th><th>Purpose</th><th>Link</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Language</td><td>Python</td><td>Core pipeline, backend, OCR, evaluation</td><td><a href="https://www.python.org/">python.org</a></td></tr>
+          <tr><td>Research UI</td><td>Streamlit</td><td>Local testing and research dashboard</td><td><a href="https://streamlit.io/">streamlit.io</a></td></tr>
+          <tr><td>Backend API</td><td>FastAPI</td><td>Uploads, runs, reports, API routes</td><td><a href="https://fastapi.tiangolo.com/">fastapi.tiangolo.com</a></td></tr>
+          <tr><td>API Server</td><td>Uvicorn</td><td>ASGI server for FastAPI</td><td><a href="https://www.uvicorn.org/">uvicorn.org</a></td></tr>
+          <tr><td>Web Frontend</td><td>Next.js 15</td><td>Product-style web interface</td><td><a href="https://nextjs.org/">nextjs.org</a></td></tr>
+          <tr><td>Frontend UI</td><td>React 19</td><td>Web component layer</td><td><a href="https://react.dev/">react.dev</a></td></tr>
+          <tr><td>OCR</td><td>EasyOCR</td><td>Printed and clean-sheet OCR</td><td><a href="https://github.com/JaidedAI/EasyOCR">GitHub</a></td></tr>
+          <tr><td>OCR</td><td>Google Vision AI</td><td>Handwritten OCR + cloud text extraction</td><td><a href="https://cloud.google.com/vision">Google Cloud Vision</a></td></tr>
+          <tr><td>OCR</td><td>Azure Document Intelligence</td><td>Handwritten OCR alternative</td><td><a href="https://azure.microsoft.com/en-us/products/ai-services/ai-document-intelligence">Azure</a></td></tr>
+          <tr><td>PDF Processing</td><td>pdf2image</td><td>Convert PDF pages into images</td><td><a href="https://github.com/Belval/pdf2image">GitHub</a></td></tr>
+          <tr><td>Image Processing</td><td>OpenCV</td><td>Diagram extraction and image operations</td><td><a href="https://opencv.org/">opencv.org</a></td></tr>
+          <tr><td>Image Processing</td><td>Pillow</td><td>Image loading and conversions</td><td><a href="https://python-pillow.org/">python-pillow.org</a></td></tr>
+          <tr><td>Semantic Scoring</td><td>Sentence Transformers</td><td>Text similarity using MiniLM</td><td><a href="https://www.sbert.net/">sbert.net</a></td></tr>
+          <tr><td>Visual Scoring</td><td>CLIP</td><td>Diagram image similarity</td><td><a href="https://github.com/openai/CLIP">GitHub</a></td></tr>
+          <tr><td>Formula OCR</td><td>pix2tex</td><td>Equation image → LaTeX</td><td><a href="https://github.com/lukas-blecher/LaTeX-OCR">GitHub</a></td></tr>
+          <tr><td>Symbolic Math</td><td>SymPy</td><td>Formula parsing and equivalence checking</td><td><a href="https://www.sympy.org/">sympy.org</a></td></tr>
+          <tr><td>LLM Scoring</td><td>Gemini 2.5 Flash</td><td>Rubric-aware LLM evaluation</td><td><a href="https://ai.google.dev/gemini-api/docs">Gemini API Docs</a></td></tr>
+          <tr><td>PDF Reports</td><td>FPDF2</td><td>Student report generation</td><td><a href="https://py-pdf.github.io/fpdf2/">FPDF2 Docs</a></td></tr>
+          <tr><td>Containerization</td><td>Docker</td><td>Backend deployment image</td><td><a href="https://www.docker.com/">docker.com</a></td></tr>
+          <tr><td>Hosting</td><td>Vercel</td><td>Next.js frontend deployment</td><td><a href="https://vercel.com/">vercel.com</a></td></tr>
+          <tr><td>Hosting</td><td>Google Cloud Run</td><td>Containerized backend deployment</td><td><a href="https://cloud.google.com/run">cloud.google.com/run</a></td></tr>
+          <tr><td>CI/CD</td><td>GitHub Actions</td><td>Build and push automation</td><td><a href="https://docs.github.com/en/actions">GitHub Actions</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 24. Sample Data Flow -->
+    <div id="dataflow" class="section-divider">
+      <div class="section-number">24</div>
+      <h2>Sample Data Flow</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>A practical walkthrough of one complete evaluation run:</p>
+    <ol>
+      <li>Upload <code>Ideal Answer Sheet.pdf</code></li>
+      <li>Upload <code>rubric.json</code></li>
+      <li>Upload one or more student PDFs</li>
+      <li>Choose <strong>SBERT</strong> or <strong>Gemini</strong> as the evaluation engine</li>
+      <li>Choose OCR backend: EasyOCR, Google Vision AI, or Azure Document Intelligence</li>
+      <li>Click <strong>Run evaluation</strong></li>
+      <li>OCR JSON is created for ideal + all student sheets</li>
+      <li>Diagram and formula outputs are extracted per page</li>
+      <li>Student answers are compared page by page against ideal</li>
+      <li>Weighted scores are calculated per question per student</li>
+      <li>Evaluation JSON and PDF reports are generated</li>
+      <li>Final summary ranking table is displayed with download links</li>
+    </ol>
+
+    <!-- 25. Strengths & Challenges -->
+    <div id="strengths" class="section-divider">
+      <div class="section-number">25</div>
+      <h2>Strengths & Challenges</h2>
+      <div class="section-line"></div>
+    </div>
+    <div class="highlight-grid">
+      <div class="highlight-card">
+        <div class="hc-label">✅ Current Strengths</div>
+        <div class="hc-value" style="font-size:0.9rem; margin-bottom:6px;"> </div>
+        <ul style="margin:0; padding-left:1.1rem;">
+          <li>Multimodal design — not just plain OCR</li>
+          <li>Both local and cloud evaluation paths</li>
+          <li>Handwritten OCR support</li>
+          <li>Symbolic math comparison for formulas</li>
+          <li>Downloadable PDF reports</li>
+          <li>Both research and product-style interfaces</li>
+        </ul>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">⚠ Current Challenges</div>
+        <div class="hc-value" style="font-size:0.9rem; margin-bottom:6px;"> </div>
+        <ul style="margin:0; padding-left:1.1rem;">
+          <li>OCR quality is the biggest bottleneck for complex handwriting</li>
+          <li>One-page-per-question simplification</li>
+          <li>Diagram extraction is heuristic-based</li>
+          <li>Formula detection can miss edge cases</li>
+          <li>Large hosted runs need careful deployment tuning</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 26. Future Work -->
+    <div id="future" class="section-divider">
+      <div class="section-number">26</div>
+      <h2>Future Enhancements</h2>
+      <div class="section-line"></div>
+    </div>
+    <ol>
+      <li>Better question segmentation beyond one-page-one-question assumption</li>
+      <li>Stronger handwritten formula recognition (specialized models)</li>
+      <li>Diagram object detection instead of only connected components</li>
+      <li>Better dashboard analytics and charts</li>
+      <li>Cloud storage for long-term report persistence</li>
+      <li>Human-in-the-loop override and review mode</li>
+      <li>Multi-rubric support for different courses</li>
+      <li>Better benchmarking on large answer-sheet datasets</li>
+    </ol>
+
+    <!-- Conclusion -->
+    <div id="conclusion" class="section-divider">
+      <div class="section-number">27</div>
+      <h2>Conclusion</h2>
+      <div class="section-line"></div>
+    </div>
+    <p>The Automated Subjective Answer Sheet Evaluation System is a research-driven, multimodal answer-sheet evaluation platform designed to handle the real complexity of descriptive academic assessment. Instead of relying only on exact keywords, it combines OCR, semantic similarity, diagram analysis, formula parsing, symbolic math evaluation, rubric-based weighting, and report generation into one connected workflow.</p>
+    <p>This makes the project much more realistic and extensible than a simple text-matching prototype. It already demonstrates a strong foundation for an academic BTP project and also forms the base for a future product-grade evaluation platform.</p>
+
+    <div class="callout callout-success" style="margin-top:32px;">
+      <span class="callout-icon">📌</span>
+      <div class="callout-content">This documentation page is intentionally written in a structured report style so it can later be converted into a formal project report, project synopsis, documentation chapter, or research paper draft.</div>
+    </div>
+
+    <!-- Quick Reference -->
+    <div class="section-divider" style="margin-top:48px;">
+      <div class="section-number">🔗</div>
+      <h2>Quick Reference</h2>
+      <div class="section-line"></div>
+    </div>
+    <div class="highlight-grid">
+      <div class="highlight-card">
+        <div class="hc-label">Core Source Files</div>
+        <div class="hc-value" style="font-size:0.9rem; margin-bottom:6px;"> </div>
+        <ul style="margin:0; padding-left:1.1rem;">
+          <li><code>src/ocr_pipeline.py</code></li>
+          <li><code>src/diagram_extractor.py</code></li>
+          <li><code>src/formula_pipeline.py</code></li>
+          <li><code>src/formula_evaluator.py</code></li>
+          <li><code>src/evaluation_core.py</code></li>
+          <li><code>src/llm_evaluator.py</code></li>
+          <li><code>src/pipeline_service.py</code></li>
+          <li><code>src/report_generator.py</code></li>
+          <li><code>src/app.py</code></li>
+          <li><code>backend_api/main.py</code></li>
+        </ul>
+      </div>
+      <div class="highlight-card">
+        <div class="hc-label">Key Config Files</div>
+        <div class="hc-value" style="font-size:0.9rem; margin-bottom:6px;"> </div>
+        <ul style="margin:0; padding-left:1.1rem;">
+          <li><code>rubric.json</code></li>
+          <li><code>requirements.txt</code></li>
+          <li><code>requirements.backend.txt</code></li>
+          <li><code>Dockerfile</code></li>
+          <li><code>.env.production.example</code></li>
+          <li><code>.github/workflows/backend-acr.yml</code></li>
+          <li><code>web/app/evaluate/page.tsx</code></li>
+        </ul>
+      </div>
+    </div>
+
   </main>
 
-  <script type="module">
-    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-    mermaid.initialize({ startOnLoad: true, securityLevel: 'loose' });
-    await mermaid.run({ querySelector: '.mermaid' });
-  </script>
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-text">AutoGrade — Automated Subjective Answer Sheet Evaluation System</div>
+    <div class="footer-text">Project Documentation — Multimodal AI Grading Pipeline</div>
+  </footer>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    securityLevel: 'loose',
+    theme: 'default',
+    themeVariables: {
+      primaryColor: '#dbeafe',
+      primaryTextColor: '#1e3a8a',
+      primaryBorderColor: '#2563eb',
+      lineColor: '#3b82f6',
+      secondaryColor: '#ede9fe',
+      tertiaryColor: '#f0fdf4',
+      background: '#fafcff',
+      mainBkg: '#dbeafe',
+      nodeBorder: '#2563eb',
+      clusterBkg: '#eff6ff',
+      titleColor: '#0f172a',
+      edgeLabelBackground: '#f8faff',
+      fontFamily: 'Inter, system-ui, sans-serif'
+    }
+  });
+  await mermaid.run({ querySelector: '.mermaid' });
+</script>
+
+<script>
+  // ── Sidebar toggle (mobile) ────────────────────────────────────────
+  const toggle = document.getElementById('navToggle');
+  const sidebar = document.getElementById('sidebar');
+  toggle.addEventListener('click', () => sidebar.classList.toggle('open'));
+  document.addEventListener('click', e => {
+    if (!sidebar.contains(e.target) && !toggle.contains(e.target)) {
+      sidebar.classList.remove('open');
+    }
+  });
+
+  // ── Active nav link on scroll ─────────────────────────────────────
+  const sections = document.querySelectorAll('[id]');
+  const navLinks = document.querySelectorAll('.nav-link');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(link => {
+          link.classList.toggle('active', link.getAttribute('href') === '#' + entry.target.id);
+        });
+      }
+    });
+  }, { rootMargin: '-20% 0px -75% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  // ── Nav search filter ─────────────────────────────────────────────
+  const searchInput = document.getElementById('navSearch');
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.toLowerCase();
+    navLinks.forEach(link => {
+      const match = link.textContent.toLowerCase().includes(q);
+      link.style.display = match ? 'flex' : 'none';
+    });
+  });
+
+  // ── Animate score bars on scroll ─────────────────────────────────
+  const bars = document.querySelectorAll('.score-bar-fill');
+  bars.forEach(bar => {
+    const w = bar.style.width;
+    bar.style.width = '0';
+    const barObs = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) {
+        bar.style.width = w;
+        barObs.disconnect();
+      }
+    });
+    barObs.observe(bar);
+  });
+</script>
 </body>
 </html>
