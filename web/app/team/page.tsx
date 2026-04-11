@@ -160,8 +160,8 @@ export default async function TeamPage() {
       </div>
 
       <footer className="team-showcase-footer">
-        <span>Built at RECK · Electronics Engineering · 2025-26</span>
-        <span>Ai Grader · Automated Evaluation System</span>
+        <span>Built at RECK · Department of Electronics Engineering · Batch 2022-26</span>
+        <span>Ai Grader · Automated Subjective Answer Sheet Evaluation System</span>
       </footer>
     </section>
   );
