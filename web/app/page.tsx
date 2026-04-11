@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SectionShell } from "../components/section-shell";
+import { DOCUMENTATION_HREF } from "../lib/documentation";
 
 const quickSnapshot = [
   {
@@ -77,7 +78,7 @@ export default function HomePage() {
                 Start Evaluation
               </Link>
               <Link
-                href="/documentation"
+                href={DOCUMENTATION_HREF}
                 className="button-secondary"
                 target="_blank"
                 rel="noreferrer"

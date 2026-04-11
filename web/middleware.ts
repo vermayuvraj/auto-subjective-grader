@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const REPORT_PATH = "/project-report.html";
 const configuredDocumentationUrl =
   process.env.DOCUMENTATION_URL?.trim() || process.env.NEXT_PUBLIC_DOCUMENTATION_URL?.trim() || "";
 
@@ -38,13 +39,17 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (docsHost && host === docsHost && pathname === "/") {
+  if (docsHost && host === docsHost && (pathname === "/" || pathname === "/documentation")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/documentation";
+    url.pathname = REPORT_PATH;
     return NextResponse.rewrite(url);
   }
 
-  if (rootDomain && (host === rootDomain || host === `www.${rootDomain}`) && pathname === "/documentation") {
+  if (
+    rootDomain &&
+    (host === rootDomain || host === `www.${rootDomain}`) &&
+    (pathname === "/documentation" || pathname === REPORT_PATH)
+  ) {
     const docsUrl = new URL(configuredDocumentationUrl);
     docsUrl.pathname = "/";
     docsUrl.search = search;

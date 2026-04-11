@@ -4,11 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SVGProps, useEffect, useState } from "react";
+import { DOCUMENTATION_HREF } from "../lib/documentation";
 
 const navItems = [
   { href: "/", label: "Home" },
   { href: "/evaluate", label: "Evaluate" },
-  { href: "/documentation", label: "Documentation", openInNewTab: true },
+  { href: DOCUMENTATION_HREF, label: "Documentation", openInNewTab: true },
   { href: "/team", label: "Team" },
 ];
 
