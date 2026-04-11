@@ -63,6 +63,7 @@ type RuntimeConfig = {
   azure_configured: boolean;
   google_vision_supported: boolean;
   gemini_configured: boolean;
+  durable_run_storage: boolean;
   allowed_origins: string[];
 };
 
@@ -640,6 +641,14 @@ export default function EvaluatePage() {
                   or scoring paths before pushing changes live.
                 </div>
               )}
+
+              {isHostedDeployment && runtimeConfig && !runtimeConfig.durable_run_storage ? (
+                <div className="status-card status-card--error">
+                  Durable run storage is not configured on this deployment yet. Set
+                  `API_RUNS_BUCKET` on the backend so completed runs and PDF downloads stay
+                  available after Cloud Run instance changes.
+                </div>
+              ) : null}
 
               {ocrBackend === "google_vision" ? (
                 <div className="status-card">

@@ -114,6 +114,12 @@ Deployment guide:
 
 - [DEPLOY_VERCEL_CLOUD_RUN.md](C:/Users/Yuvraj%20Verma/Desktop/BTP%20P1.1/auto_subjective_grader/DEPLOY_VERCEL_CLOUD_RUN.md)
 
+Hosted run persistence:
+
+- `API_RUNS_ROOT` is still used as the local working directory while a run is executing
+- configure `API_RUNS_BUCKET` to mirror completed run metadata and generated PDF reports into Google Cloud Storage
+- configure `API_RUNS_PREFIX` if you want those run artifacts under a custom folder inside the bucket
+
 ## Current Assumptions
 
 - One page is treated as one question
@@ -125,7 +131,7 @@ Deployment guide:
 - Multi-step derivations may still be harder than isolated formulas
 - OCR quality still strongly affects text, symbols, and labels
 - Gemini mode does not yet use the symbolic formula scoring path
-- Public deployment is not the current focus
+- public deployments need durable storage configured if you want run history and PDF downloads to survive Cloud Run instance changes
 
 ## Team
 

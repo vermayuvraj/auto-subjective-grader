@@ -35,10 +35,21 @@ Before you deploy, make sure:
   - `run.googleapis.com`
   - `cloudbuild.googleapis.com`
   - `artifactregistry.googleapis.com`
+  - `storage.googleapis.com`
 
 If `gcloud services enable ...` fails with a billing error, the project is not properly linked to billing yet.
 
 ## 2. Deploy the backend to Cloud Run
+
+Create a bucket once for durable run metadata and generated PDF reports:
+
+```powershell
+gcloud storage buckets create gs://YOUR_RUN_ARTIFACTS_BUCKET `
+  --project YOUR_PROJECT_ID `
+  --location asia-south1
+```
+
+Make sure the Cloud Run service account can read and write objects in that bucket.
 
 From the repository root:
 
@@ -54,7 +65,7 @@ gcloud run deploy auto-subjective-grader-api `
   --concurrency 1 `
   --max-instances 1 `
   --port 8001 `
-  --set-env-vars API_RUNS_ROOT=/tmp/api_runs,EASYOCR_USE_GPU=false,ALLOWED_ORIGINS=* `
+  --set-env-vars API_RUNS_ROOT=/tmp/api_runs,API_RUNS_BUCKET=YOUR_RUN_ARTIFACTS_BUCKET,API_RUNS_PREFIX=api_runs,EASYOCR_USE_GPU=false,ALLOWED_ORIGINS=* `
   --set-env-vars GEMINI_API_KEY=YOUR_GEMINI_KEY
 ```
 
@@ -109,8 +120,6 @@ For evaluation:
 
 ## Runtime notes
 
-- `API_RUNS_ROOT=/tmp/api_runs` is ephemeral
-- generated files and history are not durable across container replacements
-- this is acceptable for demo deployment
-
-For durable production storage later, move reports and run artifacts to Cloud Storage.
+- `API_RUNS_ROOT=/tmp/api_runs` remains the fast local working directory during a live evaluation
+- `API_RUNS_BUCKET` now keeps completed run metadata and generated reports durable across Cloud Run instance changes
+- without `API_RUNS_BUCKET`, opening older runs and downloading PDFs can fail after the serving instance is replaced

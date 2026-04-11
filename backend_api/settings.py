@@ -26,6 +26,8 @@ def _read_csv(name: str, default: List[str]) -> List[str]:
 class AppSettings:
     poppler_path: Optional[str]
     api_runs_root: Path
+    api_runs_bucket: Optional[str]
+    api_runs_prefix: str
     readme_path: Path
     allowed_origins: List[str]
     easyocr_use_gpu: bool
@@ -38,6 +40,8 @@ class AppSettings:
 def load_settings(project_root: Path) -> AppSettings:
     poppler_path = os.getenv("POPPLER_PATH")
     api_runs_root = Path(os.getenv("API_RUNS_ROOT", str(project_root / "results" / "api_runs")))
+    api_runs_bucket = os.getenv("API_RUNS_BUCKET")
+    api_runs_prefix = os.getenv("API_RUNS_PREFIX", "api_runs")
     readme_path = Path(os.getenv("README_PATH", str(project_root / "README.md")))
     allowed_origins = _read_csv("ALLOWED_ORIGINS", DEFAULT_ALLOWED_ORIGINS)
     google_vision_language_hints = _read_csv(
@@ -52,6 +56,8 @@ def load_settings(project_root: Path) -> AppSettings:
     return AppSettings(
         poppler_path=poppler_path,
         api_runs_root=api_runs_root,
+        api_runs_bucket=api_runs_bucket,
+        api_runs_prefix=api_runs_prefix,
         readme_path=readme_path,
         allowed_origins=allowed_origins,
         easyocr_use_gpu=_read_bool("EASYOCR_USE_GPU", False),

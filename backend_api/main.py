@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import sys
@@ -12,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
@@ -20,6 +21,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.append(str(SRC_ROOT))
 
 from backend_api.content import RESOURCE_ITEMS, TEAM_MEMBERS
+from backend_api.run_artifact_store import RunArtifactStore
 from backend_api.settings import load_settings
 
 if TYPE_CHECKING:
@@ -30,10 +32,15 @@ SETTINGS = load_settings(PROJECT_ROOT)
 POPPLER_BIN = SETTINGS.poppler_path
 API_RUNS_ROOT = SETTINGS.api_runs_root
 README_PATH = SETTINGS.readme_path
+RUN_ARTIFACT_STORE = RunArtifactStore(
+    bucket_name=SETTINGS.api_runs_bucket,
+    prefix=SETTINGS.api_runs_prefix,
+)
 
 JOB_CACHE: Dict[str, Dict[str, Any]] = {}
 JOB_CACHE_LOCK = threading.Lock()
 PIPELINE_RUN_LOCK = threading.Lock()
+LOGGER = logging.getLogger(__name__)
 
 
 app = FastAPI(
@@ -101,20 +108,35 @@ def _load_run_meta(run_id: str) -> Dict[str, Any]:
         return JOB_CACHE[run_id]
 
     meta_path = _run_meta_path(run_id)
-    if not meta_path.exists():
-        raise HTTPException(status_code=404, detail="Run not found.")
+    if meta_path.exists():
+        with meta_path.open("r", encoding="utf-8") as f:
+            meta = json.load(f)
+        with JOB_CACHE_LOCK:
+            JOB_CACHE[run_id] = meta
+        return meta
 
-    with meta_path.open("r", encoding="utf-8") as f:
-        meta = json.load(f)
-    with JOB_CACHE_LOCK:
-        JOB_CACHE[run_id] = meta
-    return meta
+    meta = RUN_ARTIFACT_STORE.load_run_meta(run_id)
+    if meta is not None:
+        _write_json_atomic(meta_path, meta)
+        with JOB_CACHE_LOCK:
+            JOB_CACHE[run_id] = meta
+        return meta
+
+    raise HTTPException(status_code=404, detail="Run not found.")
 
 
-def _persist_job_meta(run_id: str, meta: Dict[str, Any]) -> None:
+def _persist_job_meta(run_id: str, meta: Dict[str, Any], sync_remote: bool = False) -> None:
     with JOB_CACHE_LOCK:
         JOB_CACHE[run_id] = meta
     _write_json_atomic(_run_meta_path(run_id), meta)
+    if sync_remote:
+        RUN_ARTIFACT_STORE.save_run_meta(run_id, meta)
+
+
+def _sync_remote_reports(run_id: str, report_dir_value: Optional[str]) -> None:
+    if not report_dir_value or not RUN_ARTIFACT_STORE.enabled:
+        return
+    RUN_ARTIFACT_STORE.upload_reports(run_id, Path(report_dir_value))
 
 
 def _append_event(meta: Dict[str, Any], message: str) -> None:
@@ -367,7 +389,8 @@ def _execute_job(
                 }
             )
             _append_event(meta, "Evaluation completed successfully.")
-            _persist_job_meta(run_id, meta)
+            _sync_remote_reports(run_id, meta.get("report_dir"))
+            _persist_job_meta(run_id, meta, sync_remote=True)
 
         except Exception as exc:
             meta = _load_run_meta(run_id).copy()
@@ -380,11 +403,17 @@ def _execute_job(
                 }
             )
             _append_event(meta, f"Evaluation failed: {exc}")
-            _persist_job_meta(run_id, meta)
+            _persist_job_meta(run_id, meta, sync_remote=True)
 
 
 def _list_run_summaries() -> List[Dict[str, Any]]:
     API_RUNS_ROOT.mkdir(parents=True, exist_ok=True)
+    runs_by_id: Dict[str, Dict[str, Any]] = {}
+    for meta in RUN_ARTIFACT_STORE.list_run_metas():
+        run_id = meta.get("run_id")
+        if run_id:
+            runs_by_id[run_id] = meta
+
     runs: List[Dict[str, Any]] = []
     for meta_file in API_RUNS_ROOT.glob("*/run_meta.json"):
         try:
@@ -392,7 +421,11 @@ def _list_run_summaries() -> List[Dict[str, Any]]:
                 meta = json.load(f)
         except Exception:
             continue
+        run_id = meta.get("run_id")
+        if run_id:
+            runs_by_id[run_id] = meta
 
+    for meta in runs_by_id.values():
         rows = meta.get("summary_rows", [])
         top_student = rows[0]["student"] if rows else None
         top_percentage = rows[0]["percentage"] if rows else None
@@ -460,6 +493,7 @@ def get_runtime_config() -> Dict[str, Any]:
         "azure_configured": bool(SETTINGS.azure_endpoint and SETTINGS.azure_key),
         "google_vision_supported": True,
         "gemini_configured": SETTINGS.gemini_api_key_present,
+        "durable_run_storage": RUN_ARTIFACT_STORE.enabled,
         "allowed_origins": SETTINGS.allowed_origins,
     }
 
@@ -489,6 +523,9 @@ def get_run(run_id: str) -> Dict[str, Any]:
 
 @app.get("/api/runs/{run_id}/reports/{report_name}")
 def download_report(run_id: str, report_name: str):
+    if Path(report_name).name != report_name:
+        raise HTTPException(status_code=400, detail="Invalid report name.")
+
     meta = _load_run_meta(run_id)
     report_dir_value = meta.get("report_dir")
     if not report_dir_value:
@@ -497,7 +534,14 @@ def download_report(run_id: str, report_name: str):
     report_dir = Path(report_dir_value)
     target = (report_dir / report_name).resolve()
     if not str(target).startswith(str(report_dir.resolve())) or not target.exists():
-        raise HTTPException(status_code=404, detail="Report not found.")
+        remote_report = RUN_ARTIFACT_STORE.load_report_bytes(run_id, report_name)
+        if remote_report is None:
+            raise HTTPException(status_code=404, detail="Report not found.")
+        return Response(
+            content=remote_report,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{report_name}"'},
+        )
     return FileResponse(path=target, filename=target.name, media_type="application/pdf")
 
 
@@ -631,6 +675,7 @@ def evaluate_sync(
         }
     )
     _append_event(meta, "Synchronous evaluation completed successfully.")
-    _persist_job_meta(run_id, meta)
+    _sync_remote_reports(run_id, meta.get("report_dir"))
+    _persist_job_meta(run_id, meta, sync_remote=True)
 
     return meta
