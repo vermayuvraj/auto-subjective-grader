@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const REPORT_PATH = "/project-report.html";
+const REPORT_PATH = "/documentation.html";
+const LEGACY_REPORT_PATH = "/project-report.html";
 const configuredDocumentationUrl =
   process.env.DOCUMENTATION_URL?.trim() || process.env.NEXT_PUBLIC_DOCUMENTATION_URL?.trim() || "";
 
@@ -35,6 +36,12 @@ export function middleware(request: NextRequest) {
   const docsHost = getDocumentationHost();
   const rootDomain = getRootDomainFromDocsHost(docsHost);
 
+  if (pathname === LEGACY_REPORT_PATH) {
+    const url = request.nextUrl.clone();
+    url.pathname = REPORT_PATH;
+    return NextResponse.redirect(url);
+  }
+
   if (isAssetRequest(pathname)) {
     return NextResponse.next();
   }
@@ -48,7 +55,7 @@ export function middleware(request: NextRequest) {
   if (
     rootDomain &&
     (host === rootDomain || host === `www.${rootDomain}`) &&
-    (pathname === "/documentation" || pathname === REPORT_PATH)
+    (pathname === "/documentation" || pathname === REPORT_PATH || pathname === LEGACY_REPORT_PATH)
   ) {
     const docsUrl = new URL(configuredDocumentationUrl);
     docsUrl.pathname = "/";
