@@ -94,10 +94,10 @@ textarea {
   max-width: 1240px;
   margin: 0 auto;
   min-height: 1cm;
-  padding: 4px 24px;
+  padding: 2px 24px;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 16px;
+  gap: 14px;
   align-items: center;
 }
 
@@ -108,8 +108,9 @@ textarea {
 }
 
 .brand-mark__logo {
-  width: clamp(156px, 16vw, 236px);
-  height: auto;
+  width: auto;
+  height: clamp(28px, 3vw, 36px);
+  max-width: min(240px, 100%);
 }
 
 .site-nav {
@@ -120,12 +121,12 @@ textarea {
 }
 
 .site-nav__link {
-  padding: 8px 13px;
+  padding: 7px 12px;
   border-radius: 999px;
   border: 1px solid transparent;
   color: var(--muted);
   font-weight: 700;
-  font-size: 0.98rem;
+  font-size: 0.95rem;
   transition:
     color 0.2s ease,
     background 0.2s ease,
@@ -149,7 +150,7 @@ textarea {
 .site-header__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
 }
 
@@ -159,17 +160,19 @@ textarea {
   gap: 8px;
   border: 1px solid rgba(109, 124, 252, 0.14);
   border-radius: 999px;
-  padding: 9px 14px;
+  padding: 7px 12px;
   background: rgba(255, 255, 255, 0.9);
   color: var(--text);
   cursor: pointer;
   font-weight: 700;
+  font-size: 0.93rem;
   box-shadow: var(--shadow-soft);
   transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
 .site-header__cta--compact {
-  padding: 10px 16px;
+  padding: 8px 14px;
+  font-size: 0.94rem;
 }
 
 .theme-toggle:hover {
@@ -2133,6 +2136,11 @@ tbody tr:hover {
   box-shadow: var(--shadow-soft);
 }
 
+.team-minimal-header__copy {
+  display: grid;
+  align-content: start;
+}
+
 .team-minimal-header h1 {
   margin: 12px 0 10px;
   font-size: clamp(2rem, 4vw, 3rem);
@@ -2150,6 +2158,59 @@ tbody tr:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   align-self: start;
+}
+
+.team-feature-panel {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 26px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(240, 247, 255, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-soft);
+}
+
+.team-feature-panel__eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(112, 92, 255, 0.1);
+  color: #5546d8;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.team-feature-panel__main {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.team-feature-panel__main img {
+  width: 88px;
+  height: 88px;
+  border-radius: 26px;
+  object-fit: cover;
+  box-shadow: 0 16px 28px rgba(72, 96, 150, 0.18);
+}
+
+.team-feature-panel__content h2 {
+  margin: 0 0 6px;
+  font-size: 1.3rem;
+}
+
+.team-feature-panel__content p {
+  margin: 0;
+}
+
+.team-feature-panel__meta {
+  margin-bottom: 10px !important;
+  color: #245d8f !important;
+  font-weight: 700;
 }
 
 .team-minimal-stat {
@@ -2184,16 +2245,30 @@ tbody tr:hover {
   align-content: start;
   position: relative;
   overflow: hidden;
+  padding: 24px;
 }
 
 .team-card--minimal img {
   width: 82px;
   height: 82px;
   border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 24px;
+  object-fit: cover;
 }
 
 .team-card__media--minimal {
   margin-bottom: 0;
+  align-items: center;
+}
+
+.team-card__identity {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.team-card__identity h3 {
+  margin: 0;
 }
 
 .team-card__body .team-card__summary {
@@ -2213,6 +2288,10 @@ tbody tr:hover {
   flex-wrap: wrap;
 }
 
+.team-card__actions--feature {
+  align-items: center;
+}
+
 .team-action-button {
   min-width: 132px;
   padding: 10px 16px;
@@ -2220,6 +2299,18 @@ tbody tr:hover {
 
 .team-action-button.button-secondary {
   border: 1px solid rgba(22, 155, 255, 0.14);
+}
+
+.team-action-button svg,
+.link-chip--icon svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.link-chip--icon {
+  display: inline-flex;
+  align-items: center;
 }
 
 html[data-theme="dark"] .site-header,
@@ -2431,7 +2522,7 @@ html[data-theme="dark"] .documentation-report blockquote {
 
 @media (max-width: 560px) {
   .site-header__inner {
-    padding: 8px 16px;
+    padding: 6px 16px;
   }
 
   .brand-mark {
@@ -2454,6 +2545,10 @@ html[data-theme="dark"] .documentation-report blockquote {
   }
 
   .team-minimal-header__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .team-feature-panel__main {
     grid-template-columns: 1fr;
   }
 
