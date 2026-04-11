@@ -79,7 +79,7 @@ export function SiteHeader() {
             <ThemeIcon width={16} height={16} />
             {isDarkMode ? "Light" : "Dark"}
           </button>
-          <Link href="/evaluate" className="button-primary site-header__cta">
+          <Link href="/evaluate" className="button-primary site-header__cta site-header__cta--compact">
             Run Evaluation
           </Link>
         </div>
