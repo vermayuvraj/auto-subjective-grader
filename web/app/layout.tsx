@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { SiteHeader } from "../components/site-header";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "Automated Subjective Grader",
@@ -19,6 +20,7 @@ export default function RootLayout({
           <SiteHeader />
           <main className="page-shell">{children}</main>
         </div>
+        <Analytics />
       </body>
     </html>
   );
