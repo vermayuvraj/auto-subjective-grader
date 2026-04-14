@@ -291,6 +291,9 @@ export default function EvaluatePage() {
   const [error, setError] = useState("");
   const [currentRun, setCurrentRun] = useState<RunMeta | null>(null);
   const [runHistory, setRunHistory] = useState<RunSummary[]>([]);
+  const [historyRunDetails, setHistoryRunDetails] = useState<Record<string, RunMeta>>({});
+  const [historyLoadState, setHistoryLoadState] = useState<Record<string, "idle" | "loading" | "error">>({});
+  const [historyLoadErrors, setHistoryLoadErrors] = useState<Record<string, string>>({});
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [isHostedDeployment, setIsHostedDeployment] = useState(false);
   const hostedUsesSynchronousRuns = false;
@@ -416,14 +419,51 @@ export default function EvaluatePage() {
     setError("");
 
     try {
+      const runData = await loadRunDetails(runId);
+      setCurrentRun(runData);
+    } catch (runError) {
+      setError(runError instanceof Error ? runError.message : "Unable to load the selected run.");
+    }
+  }
+
+  async function loadRunDetails(runId: string): Promise<RunMeta> {
+    const cached = historyRunDetails[runId];
+    if (cached) {
+      return cached;
+    }
+
+    setHistoryLoadState((current) => ({ ...current, [runId]: "loading" }));
+    setHistoryLoadErrors((current) => ({ ...current, [runId]: "" }));
+
+    try {
       const response = await fetch(`${BROWSER_API_BASE_URL}/runs/${runId}`, { cache: "no-store" });
       const data = await readApiPayload<RunMeta>(response);
       if (!response.ok) {
         throw new Error("detail" in data && data.detail ? data.detail : "Unable to load the selected run.");
       }
-      setCurrentRun(data as RunMeta);
-    } catch (runError) {
-      setError(runError instanceof Error ? runError.message : "Unable to load the selected run.");
+
+      const runData = data as RunMeta;
+      setHistoryRunDetails((current) => ({ ...current, [runId]: runData }));
+      setHistoryLoadState((current) => ({ ...current, [runId]: "idle" }));
+      return runData;
+    } catch (detailsError) {
+      const message =
+        detailsError instanceof Error ? detailsError.message : "Unable to load run history right now.";
+      setHistoryLoadState((current) => ({ ...current, [runId]: "error" }));
+      setHistoryLoadErrors((current) => ({ ...current, [runId]: message }));
+      throw detailsError;
+    }
+  }
+
+  async function handleHistoryToggle(runId: string, open: boolean) {
+    if (!open || historyRunDetails[runId] || historyLoadState[runId] === "loading") {
+      return;
+    }
+
+    try {
+      await loadRunDetails(runId);
+    } catch (detailsError) {
+      console.error("Unable to load saved run history.", detailsError);
     }
   }
 
@@ -906,6 +946,45 @@ export default function EvaluatePage() {
                       : run.message}
                   </span>
                 </div>
+
+                <details
+                  className="run-history-dropdown"
+                  onToggle={(event) =>
+                    void handleHistoryToggle(run.run_id, (event.currentTarget as HTMLDetailsElement).open)
+                  }
+                >
+                  <summary className="run-history-dropdown__summary">
+                    <span className="run-history-dropdown__label">
+                      <IconHistory width={15} height={15} />
+                      Run History
+                    </span>
+                    <span className="run-history-dropdown__hint">View timeline</span>
+                  </summary>
+
+                  <div className="run-history-dropdown__content">
+                    {historyLoadState[run.run_id] === "loading" ? (
+                      <div className="run-history-dropdown__empty">Loading run history...</div>
+                    ) : historyLoadState[run.run_id] === "error" ? (
+                      <div className="run-history-dropdown__empty">
+                        {historyLoadErrors[run.run_id] || "Unable to load run history."}
+                      </div>
+                    ) : historyRunDetails[run.run_id]?.events?.length ? (
+                      <div className="run-history-event-list">
+                        {historyRunDetails[run.run_id].events
+                          .slice()
+                          .reverse()
+                          .map((item) => (
+                            <div className="run-history-event" key={`${item.timestamp}-${item.message}`}>
+                              <strong>{formatTimestamp(item.timestamp)}</strong>
+                              <span>{item.message}</span>
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <div className="run-history-dropdown__empty">No run history available for this evaluation yet.</div>
+                    )}
+                  </div>
+                </details>
 
                 <button className="button-secondary" type="button" onClick={() => void openRun(run.run_id)}>
                   Open This Run
