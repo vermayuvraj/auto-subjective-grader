@@ -900,104 +900,115 @@ export default function EvaluatePage() {
         title="Recent Run History"
         subtitle="Reopen earlier evaluations, compare engines and OCR modes, and keep your testing workflow traceable as the dataset grows."
       >
-        <div className="history-heading">
-          <span className="history-heading__icon">
-            <IconHistory width={16} height={16} />
-          </span>
-          <div>
-            <strong>Saved evaluation sessions</strong>
-            <span>Quick access to earlier runs, modes, timing, and top-scoring outputs.</span>
-          </div>
-        </div>
+        <details className="history-section-dropdown">
+          <summary className="history-section-dropdown__summary">
+            <span className="history-section-dropdown__label">
+              <IconHistory width={15} height={15} />
+              Recent runs
+            </span>
+            <span className="history-section-dropdown__meta">
+              <span className="history-section-dropdown__hint">
+                {isHistoryLoading
+                  ? "Loading..."
+                  : runHistory.length
+                    ? `${runHistory.length} saved`
+                    : "No runs"}
+              </span>
+              <span className="history-section-dropdown__chevron" aria-hidden="true">▾</span>
+            </span>
+          </summary>
 
-        {isHistoryLoading ? (
-          <div className="empty-state">
-            <strong>Loading runs...</strong>
-            <span>The API is collecting previously saved evaluations.</span>
-          </div>
-        ) : runHistory.length ? (
-          <div className="run-history-grid">
-            {runHistory.map((run) => (
-              <div className="run-history-card" key={run.run_id}>
-                <div className="status-row">
-                  <span className={getStatusTone(run.status)}>{run.status.toUpperCase()}</span>
-                  <span className="pill">{getEngineLabel(run.engine)}</span>
-                </div>
-
-                <div className="run-history-card__title">
-                  <span className="run-history-card__icon">
-                    <IconHistory width={15} height={15} />
-                  </span>
-                  <h3>{run.run_id}</h3>
-                </div>
-
-                <div className="history-meta">
-                  <span>{getOcrLabel(run.ocr_backend)}</span>
-                  <span>{run.student_count} student(s)</span>
-                  <span>Created {formatTimestamp(run.created_at)}</span>
-                  <span>Duration {formatDuration(run.elapsed_seconds)}</span>
-                </div>
-
-                <div className="history-highlight">
-                  <strong>{run.top_student ? run.top_student : "No score yet"}</strong>
-                  <span>
-                    {run.top_percentage !== null && run.top_percentage !== undefined
-                      ? `${run.top_percentage.toFixed(2)}% top score`
-                      : run.message}
-                  </span>
-                </div>
-
-                <details
-                  className="run-history-dropdown"
-                  onToggle={(event) =>
-                    void handleHistoryToggle(run.run_id, (event.currentTarget as HTMLDetailsElement).open)
-                  }
-                >
-                  <summary className="run-history-dropdown__summary">
-                    <span className="run-history-dropdown__label">
-                      <IconHistory width={15} height={15} />
-                      Run History
-                    </span>
-                    <span className="run-history-dropdown__hint">View timeline</span>
-                  </summary>
-
-                  <div className="run-history-dropdown__content">
-                    {historyLoadState[run.run_id] === "loading" ? (
-                      <div className="run-history-dropdown__empty">Loading run history...</div>
-                    ) : historyLoadState[run.run_id] === "error" ? (
-                      <div className="run-history-dropdown__empty">
-                        {historyLoadErrors[run.run_id] || "Unable to load run history."}
-                      </div>
-                    ) : historyRunDetails[run.run_id]?.events?.length ? (
-                      <div className="run-history-event-list">
-                        {historyRunDetails[run.run_id].events
-                          .slice()
-                          .reverse()
-                          .map((item) => (
-                            <div className="run-history-event" key={`${item.timestamp}-${item.message}`}>
-                              <strong>{formatTimestamp(item.timestamp)}</strong>
-                              <span>{item.message}</span>
-                            </div>
-                          ))}
-                      </div>
-                    ) : (
-                      <div className="run-history-dropdown__empty">No run history available for this evaluation yet.</div>
-                    )}
-                  </div>
-                </details>
-
-                <button className="button-secondary" type="button" onClick={() => void openRun(run.run_id)}>
-                  Open This Run
-                </button>
+          <div className="history-section-dropdown__content">
+            {isHistoryLoading ? (
+              <div className="empty-state">
+                <strong>Loading runs...</strong>
+                <span>The API is collecting previously saved evaluations.</span>
               </div>
-            ))}
+            ) : runHistory.length ? (
+              <div className="run-history-grid">
+                {runHistory.map((run) => (
+                  <div className="run-history-card" key={run.run_id}>
+                    <div className="status-row">
+                      <span className={getStatusTone(run.status)}>{run.status.toUpperCase()}</span>
+                      <span className="pill">{getEngineLabel(run.engine)}</span>
+                    </div>
+
+                    <div className="run-history-card__title">
+                      <span className="run-history-card__icon">
+                        <IconHistory width={15} height={15} />
+                      </span>
+                      <h3>{run.run_id}</h3>
+                    </div>
+
+                    <div className="history-meta">
+                      <span>{getOcrLabel(run.ocr_backend)}</span>
+                      <span>{run.student_count} student(s)</span>
+                      <span>Created {formatTimestamp(run.created_at)}</span>
+                      <span>Duration {formatDuration(run.elapsed_seconds)}</span>
+                    </div>
+
+                    <div className="history-highlight">
+                      <strong>{run.top_student ? run.top_student : "No score yet"}</strong>
+                      <span>
+                        {run.top_percentage !== null && run.top_percentage !== undefined
+                          ? `${run.top_percentage.toFixed(2)}% top score`
+                          : run.message}
+                      </span>
+                    </div>
+
+                    <details
+                      className="run-history-dropdown"
+                      onToggle={(event) =>
+                        void handleHistoryToggle(run.run_id, (event.currentTarget as HTMLDetailsElement).open)
+                      }
+                    >
+                      <summary className="run-history-dropdown__summary">
+                        <span className="run-history-dropdown__label">
+                          <IconHistory width={15} height={15} />
+                          Run History
+                        </span>
+                        <span className="run-history-dropdown__hint">View timeline</span>
+                      </summary>
+
+                      <div className="run-history-dropdown__content">
+                        {historyLoadState[run.run_id] === "loading" ? (
+                          <div className="run-history-dropdown__empty">Loading run history...</div>
+                        ) : historyLoadState[run.run_id] === "error" ? (
+                          <div className="run-history-dropdown__empty">
+                            {historyLoadErrors[run.run_id] || "Unable to load run history."}
+                          </div>
+                        ) : historyRunDetails[run.run_id]?.events?.length ? (
+                          <div className="run-history-event-list">
+                            {historyRunDetails[run.run_id].events
+                              .slice()
+                              .reverse()
+                              .map((item) => (
+                                <div className="run-history-event" key={`${item.timestamp}-${item.message}`}>
+                                  <strong>{formatTimestamp(item.timestamp)}</strong>
+                                  <span>{item.message}</span>
+                                </div>
+                              ))}
+                          </div>
+                        ) : (
+                          <div className="run-history-dropdown__empty">No run history available for this evaluation yet.</div>
+                        )}
+                      </div>
+                    </details>
+
+                    <button className="button-secondary" type="button" onClick={() => void openRun(run.run_id)}>
+                      Open This Run
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <strong>No saved runs yet.</strong>
+                <span>Your first evaluation job will appear here automatically.</span>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="empty-state">
-            <strong>No saved runs yet.</strong>
-            <span>Your first evaluation job will appear here automatically.</span>
-          </div>
-        )}
+        </details>
       </SectionShell>
     </>
   );
