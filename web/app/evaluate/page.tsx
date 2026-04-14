@@ -769,18 +769,6 @@ export default function EvaluatePage() {
                 </div>
 
                 {currentRun.error ? <div className="status-card status-card--error">{currentRun.error}</div> : null}
-
-                <div>
-                  <div className="field-label">Execution Timeline</div>
-                  <div className="event-list">
-                    {currentRun.events.slice().reverse().map((item) => (
-                      <div className="event-item" key={`${item.timestamp}-${item.message}`}>
-                        <strong>{formatTimestamp(item.timestamp)}</strong>
-                        <span>{item.message}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
             ) : (
               <div className="empty-state">
