@@ -158,7 +158,7 @@ function formatDuration(seconds: number | null): string {
 }
 
 function getEngineLabel(engine: string): string {
-  return engine === "LLM" ? "Gemini 2.5 Flash" : "SBERT (fast, local)";
+  return engine === "LLM" ? "Gemini 2.5 Flash (Vertex AI)" : "SBERT (fast, local)";
 }
 
 function getOcrLabel(ocrBackend: string): string {
@@ -648,7 +648,7 @@ export default function EvaluatePage() {
                     onChange={(e) => setEngine(e.target.value)}
                   >
                     <option value="SBERT">SBERT (fast, local)</option>
-                    <option value="LLM">Gemini 2.5 Flash (LLM API)</option>
+                    <option value="LLM">Gemini 2.5 Flash (Vertex AI)</option>
                   </select>
                 </label>
 
@@ -697,6 +697,14 @@ export default function EvaluatePage() {
                 </div>
               ) : null}
 
+              {engine === "LLM" && runtimeConfig?.gemini_configured ? (
+                <div className="status-card">
+                  <strong>Gemini on Vertex AI is ready.</strong>
+                  The backend will authenticate with Google Cloud credentials instead of a
+                  standalone Gemini API key, which is better suited for your deployed runs.
+                </div>
+              ) : null}
+
               {requiresAzure && runtimeConfig?.azure_configured ? (
                 <div className="status-card">
                   <strong>Azure handwritten OCR is ready.</strong>
@@ -705,10 +713,12 @@ export default function EvaluatePage() {
                 </div>
               ) : null}
 
-              {requiresAzure && engine === "LLM" && runtimeConfig && !runtimeConfig.gemini_configured ? (
+              {engine === "LLM" && runtimeConfig && !runtimeConfig.gemini_configured ? (
                 <div className="status-card status-card--error">
-                  Gemini mode is selected, but the backend does not currently have a
-                  `GEMINI_API_KEY` configured.
+                  Gemini on Vertex AI is selected, but the backend does not currently have
+                  Google Cloud Vertex AI configured. Set `GOOGLE_CLOUD_PROJECT`
+                  (or `VERTEX_AI_PROJECT`) and make sure the backend identity can call
+                  Vertex AI.
                 </div>
               ) : null}
 

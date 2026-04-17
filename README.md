@@ -48,10 +48,11 @@ Used for handwritten answer sheets when you want a Google Cloud-native OCR path 
 - Diagram similarity with CLIP
 - Formula-aware scoring with pix2tex and SymPy
 
-### Gemini 2.5 Flash (LLM API)
+### Gemini 2.5 Flash (Vertex AI)
 
-- OCR text is passed to Gemini
+- OCR text is passed to Gemini on Vertex AI
 - Diagram images can be attached
+- Auth uses Google Cloud credentials instead of a standalone Gemini API key
 - Returns score and textual feedback
 
 Note: formula-aware symbolic scoring is currently strongest in the SBERT path.
@@ -88,6 +89,7 @@ This allows mathematically equivalent expressions such as `(x+1)^2` and `x^2 + 2
 - Google Vision AI
 - Azure Document Intelligence
 - Sentence Transformers
+- Google Gen AI SDK on Vertex AI
 - OpenAI CLIP
 - pix2tex
 - SymPy

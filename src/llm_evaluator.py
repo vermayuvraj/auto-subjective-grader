@@ -1,6 +1,7 @@
 import sys
 import os
 import warnings
+import mimetypes
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 import os
@@ -8,7 +9,7 @@ import json
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 
-from PIL import Image
+import google.auth
 
 # Hide a known runtime-version deprecation warning from google.api_core.
 # This keeps CLI output clean while the project remains on Python 3.10.
@@ -19,7 +20,8 @@ warnings.filterwarnings(
     module=r"google\.api_core\._python_version_support",
 )
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from evaluation_core import (
     load_ocr_pages,
@@ -87,13 +89,39 @@ def _load_local_env_files() -> None:
         _load_env_file_if_present(norm_path)
 
 
+def _default_adc_path() -> Optional[str]:
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA")
+        if not appdata:
+            return None
+        return os.path.join(appdata, "gcloud", "application_default_credentials.json")
+
+    return os.path.join(os.path.expanduser("~"), ".config", "gcloud", "application_default_credentials.json")
+
+
+def _should_attempt_adc_project_resolution() -> bool:
+    explicit_credentials = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if explicit_credentials:
+        return os.path.exists(explicit_credentials)
+
+    adc_path = _default_adc_path()
+    if adc_path and os.path.exists(adc_path):
+        return True
+
+    return bool(
+        os.environ.get("K_SERVICE")
+        or os.environ.get("FUNCTION_TARGET")
+        or os.environ.get("GAE_ENV")
+    )
+
+
 @dataclass
 class LlmEvalConfig:
     ocr_root: str = "results/ocr"
     diagram_root: str = "results/diagrams"
     rubric_path: str = "rubric.json"
     model_name: str = "gemini-2.5-flash"
-    api_key_env: str = "GEMINI_API_KEY"
+    default_location: str = "global"
 
 
 class LlmEvaluator:
@@ -102,15 +130,53 @@ class LlmEvaluator:
         self.rubric = load_rubric(config.rubric_path)
 
         _load_local_env_files()
-        api_key = os.environ.get(config.api_key_env)
-        if not api_key:
+        project_id = self._resolve_vertex_project_id()
+        if not project_id:
             raise RuntimeError(
-                f"Environment variable {config.api_key_env} is not set. "
-                "Please set your Gemini API key before running LLM evaluation."
+                "Vertex AI is not configured for Gemini evaluation. Set GOOGLE_CLOUD_PROJECT "
+                "(or VERTEX_AI_PROJECT / GCLOUD_PROJECT) or configure Application Default "
+                "Credentials with a default project before running LLM evaluation."
             )
 
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(config.model_name)
+        location = (
+            os.environ.get("VERTEX_AI_LOCATION")
+            or os.environ.get("GOOGLE_CLOUD_LOCATION")
+            or config.default_location
+        )
+
+        os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "true")
+        os.environ.setdefault("GOOGLE_CLOUD_PROJECT", project_id)
+        os.environ.setdefault("GOOGLE_CLOUD_LOCATION", location)
+
+        self.project_id = project_id
+        self.location = location
+        self.client = genai.Client(
+            vertexai=True,
+            project=project_id,
+            location=location,
+            http_options=types.HttpOptions(api_version="v1"),
+        )
+
+    def _resolve_vertex_project_id(self) -> Optional[str]:
+        for env_name in (
+            "VERTEX_AI_PROJECT",
+            "GOOGLE_CLOUD_PROJECT",
+            "GCLOUD_PROJECT",
+            "GCP_PROJECT",
+        ):
+            value = os.environ.get(env_name)
+            if value:
+                return value.strip()
+
+        if not _should_attempt_adc_project_resolution():
+            return None
+
+        try:
+            _, project_id = google.auth.default()
+        except Exception:
+            return None
+
+        return project_id.strip() if project_id else None
 
     def _get_rubric_for_question(self, qid: int) -> Dict[str, Any]:
         key = str(qid)
@@ -221,46 +287,73 @@ Do not include any extra keys. Do not include explanations outside the JSON.
 """
         return prompt
 
-    def _call_gemini(
+    def _image_part_from_path(self, image_path: Optional[str]) -> Optional[types.Part]:
+        if not image_path or not os.path.exists(image_path):
+            return None
+
+        mime_type, _ = mimetypes.guess_type(image_path)
+        resolved_mime_type = mime_type or "image/png"
+
+        with open(image_path, "rb") as image_file:
+            return types.Part.from_bytes(data=image_file.read(), mime_type=resolved_mime_type)
+
+    def _call_vertex_ai(
         self,
         prompt: str,
         ideal_diagram_path: Optional[str],
         student_diagram_path: Optional[str],
     ) -> Dict[str, Any]:
         """
-        Call Gemini with text prompt + optional ideal & student diagram images.
-        Expect a JSON object in the response text.
+        Call Gemini on Vertex AI with text prompt + optional ideal & student diagram images.
+        Expect a JSON object in the response body.
         """
         parts: List[Any] = [prompt]
 
         # Attach images if available.
         # If both exist, FIRST = ideal, SECOND = student.
-        if ideal_diagram_path and os.path.exists(ideal_diagram_path):
-            try:
-                img_ideal = Image.open(ideal_diagram_path)
-                parts.append(img_ideal)
-            except Exception:
-                pass
+        ideal_part = self._image_part_from_path(ideal_diagram_path)
+        if ideal_part is not None:
+            parts.append(ideal_part)
 
-        if student_diagram_path and os.path.exists(student_diagram_path):
-            try:
-                img_student = Image.open(student_diagram_path)
-                parts.append(img_student)
-            except Exception:
-                pass
+        student_part = self._image_part_from_path(student_diagram_path)
+        if student_part is not None:
+            parts.append(student_part)
 
-        response = self.model.generate_content(parts)
-        raw = response.text
+        response = self.client.models.generate_content(
+            model=self.config.model_name,
+            contents=parts,
+            config=types.GenerateContentConfig(
+                temperature=0,
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "OBJECT",
+                    "required": [
+                        "text_score",
+                        "diagram_score",
+                        "score",
+                        "max_marks",
+                        "feedback",
+                    ],
+                    "properties": {
+                        "text_score": {"type": "NUMBER"},
+                        "diagram_score": {"type": "NUMBER"},
+                        "score": {"type": "NUMBER"},
+                        "max_marks": {"type": "NUMBER"},
+                        "feedback": {"type": "STRING"},
+                    },
+                },
+            ),
+        )
 
-        # Extract JSON from possible surrounding text/fences
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start == -1 or end == -1 or end <= start:
-            raise ValueError(f"LLM response did not contain a JSON object:\n{raw}")
+        if response.parsed:
+            if isinstance(response.parsed, dict):
+                return response.parsed
+            return json.loads(json.dumps(response.parsed))
 
-        json_str = raw[start : end + 1]
-        data = json.loads(json_str)
-        return data
+        raw = response.text or ""
+        if not raw.strip():
+            raise ValueError("Vertex AI returned an empty response.")
+        return json.loads(raw)
 
     def evaluate_student(
         self,
@@ -350,7 +443,7 @@ Do not include any extra keys. Do not include explanations outside the JSON.
             )
 
             try:
-                data = self._call_gemini(prompt, ideal_diag_path, student_diag_path)
+                data = self._call_vertex_ai(prompt, ideal_diag_path, student_diag_path)
 
                 # Extract scores with safety
                 text_score = float(data.get("text_score", 0.0))

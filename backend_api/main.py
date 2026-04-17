@@ -492,7 +492,7 @@ def get_runtime_config() -> Dict[str, Any]:
     return {
         "azure_configured": bool(SETTINGS.azure_endpoint and SETTINGS.azure_key),
         "google_vision_supported": True,
-        "gemini_configured": SETTINGS.gemini_api_key_present,
+        "gemini_configured": SETTINGS.gemini_configured,
         "durable_run_storage": RUN_ARTIFACT_STORE.enabled,
         "allowed_origins": SETTINGS.allowed_origins,
     }

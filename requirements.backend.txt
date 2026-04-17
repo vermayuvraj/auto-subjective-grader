@@ -20,4 +20,4 @@ fpdf2==2.8.5
 fastapi==0.135.3
 uvicorn[standard]==0.42.0
 python-multipart==0.0.22
-google-generativeai==0.8.5
+google-genai>=1.15,<2
