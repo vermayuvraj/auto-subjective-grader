@@ -67,6 +67,10 @@ type RuntimeConfig = {
   allowed_origins: string[];
 };
 
+type UploadSessionResponse = {
+  session_id: string;
+};
+
 type WorkflowBlock = {
   key: string;
   title: string;
@@ -278,6 +282,26 @@ async function readApiPayload<T>(response: Response): Promise<T | { detail?: str
   return { detail: text || `Request failed with status ${response.status}.` };
 }
 
+function getSubmissionErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.message === "Failed to fetch") {
+      return "The upload request could not reach the backend. Please retry. Large hosted batches are now uploaded file-by-file, so this should be much less likely.";
+    }
+    return error.message;
+  }
+
+  return "Something went wrong while creating the evaluation job.";
+}
+
+function getResponseDetail(data: unknown): string | undefined {
+  if (!data || typeof data !== "object" || !("detail" in data)) {
+    return undefined;
+  }
+
+  const detail = (data as { detail?: unknown }).detail;
+  return typeof detail === "string" && detail.trim() ? detail : undefined;
+}
+
 export default function EvaluatePage() {
   const [idealPdf, setIdealPdf] = useState<File | null>(null);
   const [rubricJson, setRubricJson] = useState<File | null>(null);
@@ -289,6 +313,7 @@ export default function EvaluatePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [error, setError] = useState("");
+  const [submitStatus, setSubmitStatus] = useState("");
   const [currentRun, setCurrentRun] = useState<RunMeta | null>(null);
   const [runHistory, setRunHistory] = useState<RunSummary[]>([]);
   const [historyRunDetails, setHistoryRunDetails] = useState<Record<string, RunMeta>>({});
@@ -301,6 +326,7 @@ export default function EvaluatePage() {
   const requiresAzure = useMemo(() => ocrBackend === "azure", [ocrBackend]);
   const needsManualAzureSecrets = requiresAzure && !runtimeConfig?.azure_configured;
   const isPolling = currentRun ? ["queued", "running"].includes(currentRun.status) : false;
+  const shouldUseUploadSessions = isHostedDeployment && (runtimeConfig?.durable_run_storage ?? true);
   const workflowBlocks = useMemo(() => getWorkflowBlocks(currentRun), [currentRun]);
   const currentElapsed = useMemo(() => getRunElapsedSeconds(currentRun), [currentRun]);
 
@@ -467,9 +493,64 @@ export default function EvaluatePage() {
     }
   }
 
+  async function createUploadSession(): Promise<string> {
+    const response = await fetch(`${BROWSER_API_BASE_URL}/upload-sessions`, {
+      method: "POST",
+    });
+    const data = await readApiPayload<UploadSessionResponse>(response);
+    if (!response.ok) {
+      throw new Error(getResponseDetail(data) ?? "Unable to create the upload session.");
+    }
+    return (data as UploadSessionResponse).session_id;
+  }
+
+  async function uploadSessionFile(
+    sessionId: string,
+    kind: "ideal_pdf" | "rubric_json" | "student_pdf",
+    file: File
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append("kind", kind);
+    formData.append("file", file);
+
+    const response = await fetch(`${BROWSER_API_BASE_URL}/upload-sessions/${sessionId}/files`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await readApiPayload<Record<string, unknown>>(response);
+    if (!response.ok) {
+      throw new Error(getResponseDetail(data) ?? `Unable to upload ${file.name}.`);
+    }
+  }
+
+  async function createJobFromUploadSession(
+    sessionId: string,
+    effectiveEngine: string,
+    effectiveOcrBackend: string
+  ): Promise<RunMeta> {
+    const formData = new FormData();
+    formData.append("engine", effectiveEngine);
+    formData.append("ocr_backend", effectiveOcrBackend);
+    if (needsManualAzureSecrets) {
+      formData.append("azure_endpoint", azureEndpoint);
+      formData.append("azure_key", azureKey);
+    }
+
+    const response = await fetch(`${BROWSER_API_BASE_URL}/upload-sessions/${sessionId}/jobs`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await readApiPayload<RunMeta>(response);
+    if (!response.ok) {
+      throw new Error(getResponseDetail(data) ?? "Evaluation failed.");
+    }
+    return data as RunMeta;
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setSubmitStatus("");
 
     if (!idealPdf || !rubricJson || studentPdfs.length === 0) {
       setError("Please upload the ideal sheet, rubric JSON, and at least one student PDF.");
@@ -484,76 +565,105 @@ export default function EvaluatePage() {
     const effectiveEngine = engine;
     const effectiveOcrBackend = ocrBackend;
 
-    const formData = new FormData();
-    formData.append("ideal_pdf", idealPdf);
-    formData.append("rubric_json", rubricJson);
-    studentPdfs.forEach((file) => formData.append("student_pdfs", file));
-    formData.append("engine", effectiveEngine);
-    formData.append("ocr_backend", effectiveOcrBackend);
-    if (needsManualAzureSecrets) {
-      formData.append("azure_endpoint", azureEndpoint);
-      formData.append("azure_key", azureKey);
-    }
-
     try {
       setIsSubmitting(true);
+      let createdRun: RunMeta;
 
-      const endpoint = hostedUsesSynchronousRuns ? "/evaluate" : "/jobs";
-
-      if (hostedUsesSynchronousRuns) {
-        const now = new Date().toISOString();
-        setCurrentRun({
-          run_id: "live-run",
-          status: "running",
-          engine: effectiveEngine,
-          ocr_backend: effectiveOcrBackend,
-          student_count: studentPdfs.length,
-          created_at: now,
-          started_at: now,
-          completed_at: null,
-          current_step: 1,
-          total_steps: WORKFLOW_BLOCKS.length,
-          progress_percent: 8,
-          message: "Inputs received. Preparing OCR extraction.",
-          events: [
-            {
-              timestamp: now,
-              message: "Synchronous cloud evaluation started.",
-            },
-            {
-              timestamp: now,
-              message: "Files validated and queued for processing.",
-            },
-          ],
-          elapsed_seconds: null,
-          eval_dir: null,
-          report_dir: null,
-          summary_rows: [],
-          reports: [],
-          error: null,
-        });
-      } else {
+      if (shouldUseUploadSessions) {
         setCurrentRun(null);
+        setSubmitStatus("Creating a background upload session...");
+        const sessionId = await createUploadSession();
+
+        const uploadQueue: Array<{
+          kind: "ideal_pdf" | "rubric_json" | "student_pdf";
+          file: File;
+          label: string;
+        }> = [
+          { kind: "ideal_pdf", file: idealPdf, label: "ideal answer sheet" },
+          { kind: "rubric_json", file: rubricJson, label: "rubric JSON" },
+          ...studentPdfs.map((file, index) => ({
+            kind: "student_pdf" as const,
+            file,
+            label: `student sheet ${index + 1} of ${studentPdfs.length}`,
+          })),
+        ];
+
+        for (const [index, item] of uploadQueue.entries()) {
+          setSubmitStatus(`Uploading ${item.label} (${index + 1}/${uploadQueue.length})...`);
+          await uploadSessionFile(sessionId, item.kind, item.file);
+        }
+
+        setSubmitStatus("All files uploaded. Creating the evaluation job...");
+        createdRun = await createJobFromUploadSession(sessionId, effectiveEngine, effectiveOcrBackend);
+      } else {
+        const formData = new FormData();
+        formData.append("ideal_pdf", idealPdf);
+        formData.append("rubric_json", rubricJson);
+        studentPdfs.forEach((file) => formData.append("student_pdfs", file));
+        formData.append("engine", effectiveEngine);
+        formData.append("ocr_backend", effectiveOcrBackend);
+        if (needsManualAzureSecrets) {
+          formData.append("azure_endpoint", azureEndpoint);
+          formData.append("azure_key", azureKey);
+        }
+
+        const endpoint = hostedUsesSynchronousRuns ? "/evaluate" : "/jobs";
+
+        if (hostedUsesSynchronousRuns) {
+          const now = new Date().toISOString();
+          setCurrentRun({
+            run_id: "live-run",
+            status: "running",
+            engine: effectiveEngine,
+            ocr_backend: effectiveOcrBackend,
+            student_count: studentPdfs.length,
+            created_at: now,
+            started_at: now,
+            completed_at: null,
+            current_step: 1,
+            total_steps: WORKFLOW_BLOCKS.length,
+            progress_percent: 8,
+            message: "Inputs received. Preparing OCR extraction.",
+            events: [
+              {
+                timestamp: now,
+                message: "Synchronous cloud evaluation started.",
+              },
+              {
+                timestamp: now,
+                message: "Files validated and queued for processing.",
+              },
+            ],
+            elapsed_seconds: null,
+            eval_dir: null,
+            report_dir: null,
+            summary_rows: [],
+            reports: [],
+            error: null,
+          });
+        } else {
+          setCurrentRun(null);
+        }
+
+        const response = await fetch(`${BROWSER_API_BASE_URL}${endpoint}`, {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await readApiPayload<RunMeta>(response);
+        if (!response.ok) {
+          throw new Error("detail" in data && data.detail ? data.detail : "Evaluation failed.");
+        }
+
+        createdRun = data as RunMeta;
       }
 
-      const response = await fetch(`${BROWSER_API_BASE_URL}${endpoint}`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await readApiPayload<RunMeta>(response);
-      if (!response.ok) {
-        throw new Error("detail" in data && data.detail ? data.detail : "Evaluation failed.");
-      }
-
-      setCurrentRun(data as RunMeta);
+      setCurrentRun(createdRun);
+      setSubmitStatus("");
       await refreshHistory({ silent: true });
     } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Something went wrong while creating the evaluation job."
-      );
+      setError(getSubmissionErrorMessage(submitError));
+      setSubmitStatus("");
     } finally {
       setIsSubmitting(false);
     }
@@ -819,6 +929,14 @@ export default function EvaluatePage() {
                 </div>
 
                 {currentRun.error ? <div className="status-card status-card--error">{currentRun.error}</div> : null}
+              </div>
+            ) : isSubmitting && submitStatus ? (
+              <div className="empty-state">
+                <strong>{submitStatus}</strong>
+                <span>
+                  The hosted backend is uploading the files one by one before starting the job, so
+                  larger batches do not fail on a single oversized request.
+                </span>
               </div>
             ) : (
               <div className="empty-state">
