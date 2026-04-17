@@ -65,8 +65,15 @@ gcloud run deploy auto-subjective-grader-api `
   --concurrency 1 `
   --max-instances 1 `
   --port 8001 `
-  --set-env-vars API_RUNS_ROOT=/tmp/api_runs,API_RUNS_BUCKET=YOUR_RUN_ARTIFACTS_BUCKET,API_RUNS_PREFIX=api_runs,EASYOCR_USE_GPU=false,ALLOWED_ORIGINS=* `
-  --set-env-vars GEMINI_API_KEY=YOUR_GEMINI_KEY
+  --set-env-vars API_RUNS_ROOT=/tmp/api_runs,API_RUNS_BUCKET=YOUR_RUN_ARTIFACTS_BUCKET,API_RUNS_PREFIX=api_runs,EASYOCR_USE_GPU=false,ALLOWED_ORIGINS=*,GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,GOOGLE_CLOUD_LOCATION=global
+```
+
+Grant the Cloud Run service identity access to Vertex AI before testing Gemini mode:
+
+```powershell
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID `
+  --member serviceAccount:YOUR_CLOUD_RUN_SERVICE_ACCOUNT `
+  --role roles/aiplatform.user
 ```
 
 Optional handwritten OCR variables:
@@ -100,6 +107,7 @@ Add:
 
 - `NEXT_PUBLIC_API_BASE_URL=https://YOUR_BACKEND_URL`
 - `BACKEND_API_BASE_URL=https://YOUR_BACKEND_URL`
+- `GOOGLE_SITE_VERIFICATION=YOUR_SEARCH_CONSOLE_TOKEN`
 
 Then redeploy the frontend.
 
@@ -123,3 +131,4 @@ For evaluation:
 - `API_RUNS_ROOT=/tmp/api_runs` remains the fast local working directory during a live evaluation
 - `API_RUNS_BUCKET` now keeps completed run metadata and generated reports durable across Cloud Run instance changes
 - without `API_RUNS_BUCKET`, opening older runs and downloading PDFs can fail after the serving instance is replaced
+- Gemini grading now runs through Vertex AI using the backend's Google Cloud identity, so `GEMINI_API_KEY` is no longer required in production

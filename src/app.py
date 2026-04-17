@@ -1791,7 +1791,7 @@ def render_evaluate_tab() -> None:
         st.subheader("Execution Settings")
         engine_choice = st.radio(
             "Evaluation Engine",
-            ["SBERT (fast, local)", "Gemini 2.5 Flash (LLM API)"],
+            ["SBERT (fast, local)", "Gemini 2.5 Flash (Vertex AI)"],
             help="Use SBERT for fast local scoring or Gemini for LLM-assisted evaluation.",
             key="engine-choice",
         )
@@ -2029,7 +2029,7 @@ def main():
         st.subheader("Execution Settings")
         engine_choice = st.radio(
             "Evaluation Engine",
-            ["SBERT (fast, local)", "Gemini 2.5 Flash (LLM API)"],
+            ["SBERT (fast, local)", "Gemini 2.5 Flash (Vertex AI)"],
             help="Use SBERT for fast local scoring or Gemini for LLM-assisted evaluation.",
         )
         if engine_choice.startswith("SBERT"):
