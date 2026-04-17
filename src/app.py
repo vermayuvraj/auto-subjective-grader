@@ -1354,10 +1354,7 @@ def build_workflow_html(
     blocks_html: List[str] = []
     for index, block in enumerate(WORKFLOW_BLOCKS):
         key = block["key"]
-        if key == "formula" and engine != "SBERT":
-            state_class = "skipped"
-            state_label = "LLM only skips"
-        elif index < active_index:
+        if index < active_index:
             state_class = "done"
             state_label = "Done"
         elif key == active_stage:
@@ -1468,6 +1465,33 @@ def build_summary_rows(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return summary_rows
 
 
+def build_questionwise_rows(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    ordered = sorted(results, key=lambda row: row["percentage"], reverse=True)
+    question_ids = sorted(
+        {
+            int(question.get("question_id", 0))
+            for result in ordered
+            for question in result.get("questions", [])
+            if question.get("question_id") is not None
+        }
+    )
+
+    table_rows: List[Dict[str, Any]] = []
+    for result in ordered:
+        row: Dict[str, Any] = {"Student": result["student_base"]}
+        question_map = {
+            int(question["question_id"]): round(float(question.get("score", 0.0)), 2)
+            for question in result.get("questions", [])
+            if question.get("question_id") is not None
+        }
+        for question_id in question_ids:
+            row[f"Q{question_id}"] = question_map.get(question_id, 0.0)
+        row["Total"] = round(float(result.get("total_score", 0.0)), 2)
+        table_rows.append(row)
+
+    return table_rows
+
+
 def run_full_pipeline(
     ideal_pdf_path: str,
     student_pdf_paths: List[str],
@@ -1532,6 +1556,7 @@ def run_full_pipeline(
         llm_cfg = llm_evaluator.LlmEvalConfig(
             ocr_root=RESULTS_OCR_DIR,
             diagram_root=RESULTS_DIAG_DIR,
+            formula_root=RESULTS_FORMULA_DIR,
             rubric_path=RUBRIC_PATH,
         )
         report_cfg = report_generator.ReportConfig(
@@ -1558,12 +1583,11 @@ def run_full_pipeline(
         st.write("Initialising OCR (Azure Document Intelligence handwritten mode)...")
         ocr_label = "Azure Document Intelligence"
 
-    if engine == "SBERT":
-        st.write("Initialising formula OCR (pix2tex + SymPy)...")
-        formula_reader = formula_pipeline.build_formula_reader()
+    st.write("Initialising formula OCR (pix2tex + SymPy)...")
+    formula_reader = formula_pipeline.build_formula_reader()
 
     num_students = len(student_pdf_paths)
-    total_steps = (3 + 5 * num_students) if engine == "SBERT" else (2 + 4 * num_students)
+    total_steps = 3 + 5 * num_students
     current_step = 0
 
     progress_bar = None
@@ -1597,25 +1621,24 @@ def run_full_pipeline(
         current_step += 1
         publish_progress(f"Running OCR on {os.path.basename(spdf)} with {ocr_label}...")
 
-    if engine == "SBERT":
-        publish_progress("Extracting formulas for ideal answer sheet...")
+    publish_progress("Extracting formulas for ideal answer sheet...")
+    formula_pipeline.extract_formulas_for_pdf(
+        ideal_pdf_path,
+        formula_cfg,
+        formula_reader,
+    )
+    current_step += 1
+    publish_progress("Extracting formulas for ideal answer sheet...")
+
+    for spdf in student_pdf_paths:
+        publish_progress(f"Extracting formulas for {os.path.basename(spdf)}...")
         formula_pipeline.extract_formulas_for_pdf(
-            ideal_pdf_path,
+            spdf,
             formula_cfg,
             formula_reader,
         )
         current_step += 1
-        publish_progress("Extracting formulas for ideal answer sheet...")
-
-        for spdf in student_pdf_paths:
-            publish_progress(f"Extracting formulas for {os.path.basename(spdf)}...")
-            formula_pipeline.extract_formulas_for_pdf(
-                spdf,
-                formula_cfg,
-                formula_reader,
-            )
-            current_step += 1
-            publish_progress(f"Extracting formulas for {os.path.basename(spdf)}...")
+        publish_progress(f"Extracting formulas for {os.path.basename(spdf)}...")
     publish_progress("Extracting diagrams for ideal answer sheet...")
     diagram_extractor.extract_diagrams_for_pdf(ideal_pdf_path, diagram_cfg)
     current_step += 1
@@ -1710,6 +1733,30 @@ def render_results(
     summary_rows = build_summary_rows(results)
     st.dataframe(summary_rows, use_container_width=True, hide_index=True)
 
+    questionwise_rows = build_questionwise_rows(results)
+    questionwise_df = pd.DataFrame(questionwise_rows)
+
+    st.markdown(
+        """
+        <section class="section-card">
+            <div class="section-heading">Question-Wise Marks Table</div>
+            <div class="section-subtext">
+                Download the complete marksheet with each student's question-wise marks and total score.
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.dataframe(questionwise_df, use_container_width=True, hide_index=True)
+    st.download_button(
+        label="Download question-wise marks table (CSV)",
+        data=questionwise_df.to_csv(index=False).encode("utf-8"),
+        file_name="questionwise_marks_table.csv",
+        mime="text/csv",
+        use_container_width=True,
+        key="download-questionwise-table",
+    )
+
     st.markdown(
         """
         <section class="section-card">
@@ -1795,10 +1842,9 @@ def render_evaluate_tab() -> None:
             help="Use SBERT for fast local scoring or Gemini for LLM-assisted evaluation.",
             key="engine-choice",
         )
-        if engine_choice.startswith("SBERT"):
-            st.caption(
-                "SBERT mode includes formula-aware evaluation using pix2tex + SymPy when reference formulas are detected."
-            )
+        st.caption(
+            "Formula-aware parsing using pix2tex + SymPy now runs before scoring for both SBERT and Gemini paths when formulas are detected."
+        )
 
         ocr_mode = st.radio(
             "OCR Mode",
@@ -2032,11 +2078,9 @@ def main():
             ["SBERT (fast, local)", "Gemini 2.5 Flash (Vertex AI)"],
             help="Use SBERT for fast local scoring or Gemini for LLM-assisted evaluation.",
         )
-        if engine_choice.startswith("SBERT"):
-            st.caption(
-                "SBERT mode now includes formula-aware evaluation using pix2tex + SymPy "
-                "when reference formulas are detected on a page."
-            )
+        st.caption(
+            "Formula-aware parsing using pix2tex + SymPy now runs before scoring for both SBERT and Gemini paths when formulas are detected."
+        )
 
         ocr_mode = st.radio(
             "OCR Mode",
