@@ -41,6 +41,7 @@ JOB_CACHE: Dict[str, Dict[str, Any]] = {}
 JOB_CACHE_LOCK = threading.Lock()
 PIPELINE_RUN_LOCK = threading.Lock()
 LOGGER = logging.getLogger(__name__)
+UPLOAD_SESSION_PREFIX = "_upload_sessions"
 
 
 app = FastAPI(
@@ -101,6 +102,103 @@ def _write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
     with temp_path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     temp_path.replace(path)
+
+
+def _upload_session_root(session_id: str) -> Path:
+    return API_RUNS_ROOT / UPLOAD_SESSION_PREFIX / session_id
+
+
+def _upload_session_meta_path(session_id: str) -> Path:
+    return _upload_session_root(session_id) / "session_meta.json"
+
+
+def _create_upload_session_meta(session_id: str) -> Dict[str, Any]:
+    created_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    meta = {
+        "session_id": session_id,
+        "created_at": created_at,
+        "ideal_pdf": None,
+        "rubric_json": None,
+        "student_pdfs": [],
+    }
+    _persist_upload_session_meta(session_id, meta)
+    return meta
+
+
+def _persist_upload_session_meta(session_id: str, meta: Dict[str, Any]) -> None:
+    _write_json_atomic(_upload_session_meta_path(session_id), meta)
+    if RUN_ARTIFACT_STORE.enabled:
+        RUN_ARTIFACT_STORE.save_json_blob(meta, UPLOAD_SESSION_PREFIX, session_id, "session_meta.json")
+
+
+def _load_upload_session_meta(session_id: str) -> Dict[str, Any]:
+    meta_path = _upload_session_meta_path(session_id)
+    if meta_path.exists():
+        with meta_path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+
+    if RUN_ARTIFACT_STORE.enabled:
+        meta = RUN_ARTIFACT_STORE.load_json_blob(UPLOAD_SESSION_PREFIX, session_id, "session_meta.json")
+        if meta is not None:
+            _write_json_atomic(meta_path, meta)
+            return meta
+
+    raise HTTPException(status_code=404, detail="Upload session not found.")
+
+
+def _store_upload_session_file(session_id: str, kind: str, upload: UploadFile) -> Dict[str, str]:
+    original_name = Path(upload.filename or f"{kind}.bin").name
+    stored_name = f"{kind}-{uuid.uuid4().hex[:8]}-{original_name}"
+    content_type = upload.content_type or "application/octet-stream"
+    file_bytes = upload.file.read()
+
+    session_file_path = _upload_session_root(session_id) / "files" / stored_name
+    session_file_path.parent.mkdir(parents=True, exist_ok=True)
+    session_file_path.write_bytes(file_bytes)
+
+    if RUN_ARTIFACT_STORE.enabled:
+        blob_name = RUN_ARTIFACT_STORE.upload_bytes(
+            file_bytes,
+            UPLOAD_SESSION_PREFIX,
+            session_id,
+            "files",
+            stored_name,
+            content_type=content_type,
+        )
+        if not blob_name:
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to store the uploaded file in durable session storage.",
+            )
+
+    return {
+        "kind": kind,
+        "original_name": original_name,
+        "stored_name": stored_name,
+        "content_type": content_type,
+        "uploaded_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+    }
+
+
+def _materialize_upload_session_file(session_id: str, file_ref: Dict[str, str], destination: Path) -> Path:
+    source_path = _upload_session_root(session_id) / "files" / file_ref["stored_name"]
+    if source_path.exists():
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source_path, destination)
+        return destination
+
+    if RUN_ARTIFACT_STORE.enabled:
+        downloaded = RUN_ARTIFACT_STORE.download_blob_to_file(
+            destination,
+            UPLOAD_SESSION_PREFIX,
+            session_id,
+            "files",
+            file_ref["stored_name"],
+        )
+        if downloaded:
+            return destination
+
+    raise HTTPException(status_code=404, detail=f"Session file {file_ref['original_name']} is missing.")
 
 
 def _load_run_meta(run_id: str) -> Dict[str, Any]:
@@ -198,6 +296,113 @@ def _coerce_hosted_ocr_backend(
         )
 
     return ocr_backend, None
+
+
+def _prepare_run_inputs_from_upload_session(
+    session_id: str,
+    engine: str,
+    ocr_backend: str,
+    azure_endpoint: Optional[str],
+    azure_key: Optional[str],
+) -> Tuple[
+    str,
+    Dict[str, Any],
+    str,
+    List[str],
+    PipelineServiceConfig,
+    Dict[str, str],
+    Dict[str, Any],
+]:
+    PipelineServiceConfig, _ = _load_pipeline_service()
+    engine, ocr_backend = _validate_inputs(engine, ocr_backend, azure_endpoint, azure_key)
+    ocr_backend, hosted_override_message = _coerce_hosted_ocr_backend(
+        ocr_backend,
+        azure_endpoint,
+        azure_key,
+    )
+
+    session_meta = _load_upload_session_meta(session_id)
+    ideal_ref = session_meta.get("ideal_pdf")
+    rubric_ref = session_meta.get("rubric_json")
+    student_refs = session_meta.get("student_pdfs", [])
+
+    if not ideal_ref or not rubric_ref or not student_refs:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload session is incomplete. Upload the ideal PDF, rubric JSON, and at least one student PDF before starting the job.",
+        )
+
+    run_id = session_id
+    run_root = _run_root(run_id)
+    ideal_dir = run_root / "uploads" / "ideal"
+    students_dir = run_root / "uploads" / "students"
+    rubric_dir = run_root / "uploads" / "rubric"
+    outputs_dir = run_root / "outputs"
+
+    ideal_pdf_path = _materialize_upload_session_file(
+        session_id,
+        ideal_ref,
+        ideal_dir / ideal_ref["original_name"],
+    )
+
+    rubric_path = _materialize_upload_session_file(
+        session_id,
+        rubric_ref,
+        rubric_dir / rubric_ref["original_name"],
+    )
+    try:
+        with rubric_path.open("r", encoding="utf-8") as rubric_file:
+            rubric_dict = json.load(rubric_file)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid rubric JSON: {exc}") from exc
+
+    _write_json_atomic(run_root / "rubric.json", rubric_dict)
+
+    student_paths = [
+        str(
+            _materialize_upload_session_file(
+                session_id,
+                student_ref,
+                students_dir / student_ref["original_name"],
+            )
+        )
+        for student_ref in student_refs
+    ]
+
+    service_config = PipelineServiceConfig(
+        poppler_path=POPPLER_BIN,
+        dpi=300,
+        use_gpu=SETTINGS.easyocr_use_gpu,
+        languages=["en"],
+        google_vision_language_hints=SETTINGS.google_vision_language_hints,
+        rubric_path=str(run_root / "rubric.json"),
+        ocr_root=str(outputs_dir / "ocr"),
+        diagram_root=str(outputs_dir / "diagrams"),
+        formula_root=str(outputs_dir / "formulas"),
+        formula_crop_root=str(outputs_dir / "formula_crops"),
+        eval_sbert_root=str(outputs_dir / "eval"),
+        report_sbert_root=str(outputs_dir / "reports"),
+        eval_llm_root=str(outputs_dir / "eval_llm"),
+        report_llm_root=str(outputs_dir / "reports_llm"),
+    )
+
+    azure_settings = {
+        "endpoint": azure_endpoint or SETTINGS.azure_endpoint or "",
+        "key": azure_key or SETTINGS.azure_key or "",
+    }
+    return (
+        run_id,
+        rubric_dict,
+        str(ideal_pdf_path),
+        student_paths,
+        service_config,
+        azure_settings,
+        {
+            "engine": engine,
+            "ocr_backend": ocr_backend,
+            "hosted_override_message": hosted_override_message,
+        },
+    )
 
 
 def _prepare_run_inputs(
@@ -567,6 +772,92 @@ def create_job(
         ideal_pdf=ideal_pdf,
         rubric_json=rubric_json,
         student_pdfs=student_pdfs,
+        engine=engine,
+        ocr_backend=ocr_backend,
+        azure_endpoint=azure_endpoint,
+        azure_key=azure_key,
+    )
+
+    meta = _create_initial_meta(
+        run_id,
+        execution_settings["engine"],
+        execution_settings["ocr_backend"],
+        len(student_paths),
+    )
+    if execution_settings["hosted_override_message"]:
+        meta["message"] = execution_settings["hosted_override_message"]
+        _append_event(meta, execution_settings["hosted_override_message"])
+        _persist_job_meta(run_id, meta)
+
+    worker = threading.Thread(
+        target=_execute_job,
+        args=(
+            run_id,
+            rubric_dict,
+            ideal_pdf_path,
+            student_paths,
+            service_config,
+            execution_settings["engine"],
+            execution_settings["ocr_backend"],
+            azure_settings,
+        ),
+        daemon=True,
+    )
+    worker.start()
+    return meta
+
+
+@app.post("/api/upload-sessions")
+def create_upload_session() -> Dict[str, str]:
+    session_id = datetime.now().strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:8]
+    _create_upload_session_meta(session_id)
+    return {"session_id": session_id}
+
+
+@app.post("/api/upload-sessions/{session_id}/files")
+def upload_session_file(
+    session_id: str,
+    kind: str = Form(...),
+    file: UploadFile = File(...),
+) -> Dict[str, Any]:
+    if kind not in {"ideal_pdf", "rubric_json", "student_pdf"}:
+        raise HTTPException(status_code=400, detail="File kind must be ideal_pdf, rubric_json, or student_pdf.")
+
+    session_meta = _load_upload_session_meta(session_id)
+    file_ref = _store_upload_session_file(session_id, kind, file)
+
+    if kind == "student_pdf":
+        session_meta["student_pdfs"] = [*session_meta.get("student_pdfs", []), file_ref]
+    else:
+        session_meta[kind] = file_ref
+
+    _persist_upload_session_meta(session_id, session_meta)
+    return {
+        "session_id": session_id,
+        "kind": kind,
+        "file": file_ref,
+        "student_count": len(session_meta.get("student_pdfs", [])),
+    }
+
+
+@app.post("/api/upload-sessions/{session_id}/jobs")
+def create_job_from_upload_session(
+    session_id: str,
+    engine: str = Form("SBERT"),
+    ocr_backend: str = Form("easyocr"),
+    azure_endpoint: Optional[str] = Form(None),
+    azure_key: Optional[str] = Form(None),
+) -> Dict[str, Any]:
+    (
+        run_id,
+        rubric_dict,
+        ideal_pdf_path,
+        student_paths,
+        service_config,
+        azure_settings,
+        execution_settings,
+    ) = _prepare_run_inputs_from_upload_session(
+        session_id=session_id,
         engine=engine,
         ocr_backend=ocr_backend,
         azure_endpoint=azure_endpoint,

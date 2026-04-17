@@ -55,32 +55,62 @@ class RunArtifactStore:
                 blob_parts.append(cleaned)
         return "/".join(blob_parts)
 
-    def save_run_meta(self, run_id: str, meta: Dict[str, Any]) -> bool:
+    def save_json_blob(self, payload: Dict[str, Any], *parts: str) -> bool:
         bucket = self._get_bucket()
         if bucket is None:
             return False
         try:
-            bucket.blob(self._blob_name(run_id, "run_meta.json")).upload_from_string(
-                json.dumps(meta, ensure_ascii=False, indent=2),
+            bucket.blob(self._blob_name(*parts)).upload_from_string(
+                json.dumps(payload, ensure_ascii=False, indent=2),
                 content_type="application/json",
             )
             return True
         except Exception:
-            LOGGER.exception("Failed to upload run metadata for %s.", run_id)
+            LOGGER.exception("Failed to upload JSON blob for %s.", parts)
             return False
 
-    def load_run_meta(self, run_id: str) -> Optional[Dict[str, Any]]:
+    def load_json_blob(self, *parts: str) -> Optional[Dict[str, Any]]:
         bucket = self._get_bucket()
         if bucket is None:
             return None
         try:
-            blob = bucket.blob(self._blob_name(run_id, "run_meta.json"))
+            blob = bucket.blob(self._blob_name(*parts))
             if not blob.exists():
                 return None
             return json.loads(blob.download_as_bytes().decode("utf-8"))
         except Exception:
-            LOGGER.exception("Failed to load run metadata for %s.", run_id)
+            LOGGER.exception("Failed to load JSON blob for %s.", parts)
             return None
+
+    def upload_bytes(self, data: bytes, *parts: str, content_type: str = "application/octet-stream") -> Optional[str]:
+        bucket = self._get_bucket()
+        if bucket is None:
+            return None
+        try:
+            blob_name = self._blob_name(*parts)
+            bucket.blob(blob_name).upload_from_string(data, content_type=content_type)
+            return blob_name
+        except Exception:
+            LOGGER.exception("Failed to upload bytes blob for %s.", parts)
+            return None
+
+    def download_blob_to_file(self, destination: Path, *parts: str) -> bool:
+        bucket = self._get_bucket()
+        if bucket is None:
+            return False
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            bucket.blob(self._blob_name(*parts)).download_to_filename(str(destination))
+            return True
+        except Exception:
+            LOGGER.exception("Failed to download blob %s to %s.", parts, destination)
+            return False
+
+    def save_run_meta(self, run_id: str, meta: Dict[str, Any]) -> bool:
+        return self.save_json_blob(meta, run_id, "run_meta.json")
+
+    def load_run_meta(self, run_id: str) -> Optional[Dict[str, Any]]:
+        return self.load_json_blob(run_id, "run_meta.json")
 
     def list_run_metas(self) -> List[Dict[str, Any]]:
         bucket = self._get_bucket()
