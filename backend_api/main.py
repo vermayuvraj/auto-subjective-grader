@@ -961,6 +961,11 @@ def create_job_from_upload_session(
         _persist_job_meta(run_id, meta)
 
     if os.getenv("K_SERVICE"):
+        base_url = str(request.base_url).rstrip("/")
+        forwarded_proto = request.headers.get("x-forwarded-proto", "").strip().lower()
+        if base_url.startswith("http://") and (forwarded_proto == "https" or ".run.app" in base_url):
+            base_url = "https://" + base_url[len("http://") :]
+
         dispatch_token = uuid.uuid4().hex
         session_meta["dispatch_token"] = dispatch_token
         _persist_upload_session_meta(session_id, session_meta)
@@ -968,7 +973,7 @@ def create_job_from_upload_session(
         worker = threading.Thread(
             target=_dispatch_hosted_upload_session_job,
             args=(
-                str(request.base_url).rstrip("/"),
+                base_url,
                 session_id,
                 {
                     "engine": engine,
