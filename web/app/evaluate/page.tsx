@@ -391,7 +391,7 @@ export default function EvaluatePage() {
   const needsManualAzureSecrets = requiresAzure && !runtimeConfig?.azure_configured;
   const isPolling = currentRun ? ["queued", "running"].includes(currentRun.status) : false;
   const shouldUseUploadSessions = isHostedDeployment && (runtimeConfig?.durable_run_storage ?? true);
-  const hostedUsesSynchronousRuns = shouldUseUploadSessions;
+  const hostedUsesSynchronousRuns = false;
   const workflowBlocks = useMemo(() => getWorkflowBlocks(currentRun), [currentRun]);
   const currentElapsed = useMemo(() => getRunElapsedSeconds(currentRun), [currentRun]);
   const questionwiseRows = useMemo(
@@ -705,18 +705,18 @@ export default function EvaluatePage() {
           await uploadSessionFile(sessionId, item.kind, item.file);
         }
 
-        setSubmitStatus("All files uploaded. Starting the cloud evaluation...");
+        setSubmitStatus("All files uploaded. Starting the background evaluation...");
         setCurrentRun((current) =>
           current
             ? {
                 ...current,
-                message: "Files uploaded. Starting the cloud evaluation...",
+                message: "Files uploaded. Starting the background evaluation...",
                 progress_percent: 40,
                 events: [
                   ...current.events,
                   {
                     timestamp: new Date().toISOString(),
-                    message: "Files validated and submitted to the pipeline.",
+                    message: "Files validated and submitted to the background pipeline.",
                   },
                 ].slice(-20),
               }

@@ -7,11 +7,13 @@ import shutil
 import sys
 import threading
 import uuid
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 
@@ -254,6 +256,57 @@ def _update_job(run_id: str, **changes: Any) -> Dict[str, Any]:
         meta[key] = value
     _persist_job_meta(run_id, meta)
     return meta
+
+
+def _mark_run_dispatch_failed(run_id: str, error: str) -> None:
+    try:
+        meta = _load_run_meta(run_id).copy()
+    except HTTPException:
+        return
+
+    if meta.get("status") != "queued":
+        return
+
+    meta.update(
+        {
+            "status": "failed",
+            "completed_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "message": "Evaluation failed before the hosted background worker could start.",
+            "error": error,
+        }
+    )
+    _append_event(meta, f"Evaluation failed before execution started: {error}")
+    _persist_job_meta(run_id, meta, sync_remote=True)
+
+
+def _dispatch_hosted_upload_session_job(
+    base_url: str,
+    session_id: str,
+    payload: Dict[str, Any],
+    dispatch_token: str,
+) -> None:
+    request_url = f"{base_url}/api/internal/upload-sessions/{session_id}/jobs"
+    body = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        request_url,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Upload-Session-Token": dispatch_token,
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=3600) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace").strip() or str(exc)
+        LOGGER.exception("Hosted upload-session dispatch failed for %s with HTTP error.", session_id)
+        _mark_run_dispatch_failed(session_id, detail)
+    except Exception as exc:
+        LOGGER.exception("Hosted upload-session dispatch failed for %s.", session_id)
+        _mark_run_dispatch_failed(session_id, str(exc))
 
 
 def _validate_inputs(
@@ -869,12 +922,72 @@ def upload_session_file(
 
 @app.post("/api/upload-sessions/{session_id}/jobs")
 def create_job_from_upload_session(
+    request: Request,
     session_id: str,
     engine: str = Form("SBERT"),
     ocr_backend: str = Form("easyocr"),
     azure_endpoint: Optional[str] = Form(None),
     azure_key: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
+    engine, ocr_backend = _validate_inputs(engine, ocr_backend, azure_endpoint, azure_key)
+    ocr_backend, hosted_override_message = _coerce_hosted_ocr_backend(
+        ocr_backend,
+        azure_endpoint,
+        azure_key,
+    )
+
+    session_meta = _load_upload_session_meta(session_id)
+    ideal_ref = session_meta.get("ideal_pdf")
+    rubric_ref = session_meta.get("rubric_json")
+    student_refs = session_meta.get("student_pdfs", [])
+
+    if not ideal_ref or not rubric_ref or not student_refs:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload session is incomplete. Upload the ideal PDF, rubric JSON, and at least one student PDF before starting the job.",
+        )
+
+    run_id = session_id
+
+    meta = _create_initial_meta(
+        run_id,
+        engine,
+        ocr_backend,
+        len(student_refs),
+    )
+    if hosted_override_message:
+        meta["message"] = hosted_override_message
+        _append_event(meta, hosted_override_message)
+        _persist_job_meta(run_id, meta)
+
+    if os.getenv("K_SERVICE"):
+        base_url = str(request.base_url).rstrip("/")
+        forwarded_proto = request.headers.get("x-forwarded-proto", "").strip().lower()
+        if base_url.startswith("http://") and (forwarded_proto == "https" or ".run.app" in base_url):
+            base_url = "https://" + base_url[len("http://") :]
+
+        dispatch_token = uuid.uuid4().hex
+        session_meta["dispatch_token"] = dispatch_token
+        _persist_upload_session_meta(session_id, session_meta)
+
+        worker = threading.Thread(
+            target=_dispatch_hosted_upload_session_job,
+            args=(
+                base_url,
+                session_id,
+                {
+                    "engine": engine,
+                    "ocr_backend": ocr_backend,
+                    "azure_endpoint": azure_endpoint,
+                    "azure_key": azure_key,
+                },
+                dispatch_token,
+            ),
+            daemon=True,
+        )
+        worker.start()
+        return meta
+
     (
         run_id,
         rubric_dict,
@@ -890,33 +1003,6 @@ def create_job_from_upload_session(
         azure_endpoint=azure_endpoint,
         azure_key=azure_key,
     )
-
-    meta = _create_initial_meta(
-        run_id,
-        execution_settings["engine"],
-        execution_settings["ocr_backend"],
-        len(student_paths),
-    )
-    if execution_settings["hosted_override_message"]:
-        meta["message"] = execution_settings["hosted_override_message"]
-        _append_event(meta, execution_settings["hosted_override_message"])
-        _persist_job_meta(run_id, meta)
-
-    if os.getenv("K_SERVICE"):
-        try:
-            return _execute_job(
-                run_id,
-                rubric_dict,
-                ideal_pdf_path,
-                student_paths,
-                service_config,
-                execution_settings["engine"],
-                execution_settings["ocr_backend"],
-                azure_settings,
-            )
-        except Exception:
-            LOGGER.exception("Evaluation job %s failed during synchronous hosted execution.", run_id)
-            return _load_run_meta(run_id)
 
     worker = threading.Thread(
         target=_execute_job_background,
@@ -934,6 +1020,52 @@ def create_job_from_upload_session(
     )
     worker.start()
     return meta
+
+
+@app.post("/api/internal/upload-sessions/{session_id}/jobs")
+def execute_job_from_upload_session(
+    session_id: str,
+    payload: Dict[str, Any] = Body(default_factory=dict),
+    x_upload_session_token: Optional[str] = Header(None),
+) -> Dict[str, Any]:
+    session_meta = _load_upload_session_meta(session_id)
+    expected_token = session_meta.get("dispatch_token")
+    if not expected_token or x_upload_session_token != expected_token:
+        raise HTTPException(status_code=403, detail="Invalid upload session execution token.")
+
+    session_meta.pop("dispatch_token", None)
+    _persist_upload_session_meta(session_id, session_meta)
+
+    (
+        run_id,
+        rubric_dict,
+        ideal_pdf_path,
+        student_paths,
+        service_config,
+        azure_settings,
+        execution_settings,
+    ) = _prepare_run_inputs_from_upload_session(
+        session_id=session_id,
+        engine=str(payload.get("engine", "SBERT")),
+        ocr_backend=str(payload.get("ocr_backend", "easyocr")),
+        azure_endpoint=payload.get("azure_endpoint"),
+        azure_key=payload.get("azure_key"),
+    )
+
+    try:
+        return _execute_job(
+            run_id,
+            rubric_dict,
+            ideal_pdf_path,
+            student_paths,
+            service_config,
+            execution_settings["engine"],
+            execution_settings["ocr_backend"],
+            azure_settings,
+        )
+    except Exception:
+        LOGGER.exception("Evaluation job %s failed during hosted execution.", run_id)
+        return _load_run_meta(run_id)
 
 
 @app.post("/api/evaluate")
