@@ -2,6 +2,8 @@ import sys
 import os
 import warnings
 import mimetypes
+import re
+import time
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 import os
@@ -363,6 +365,52 @@ Do not include any extra keys. Do not include explanations outside the JSON.
             raise ValueError("Vertex AI returned an empty response.")
         return json.loads(raw)
 
+    def _is_retryable_vertex_error(self, error: Exception) -> bool:
+        message = str(error).upper()
+        return any(
+            token in message
+            for token in (
+                "RESOURCE_EXHAUSTED",
+                "429",
+                "TOO MANY REQUEST",
+                "SERVICE UNAVAILABLE",
+                "503",
+            )
+        )
+
+    def _extract_retry_delay_seconds(self, error: Exception, attempt: int) -> float:
+        message = str(error)
+        patterns = (
+            r"retry in\s+([0-9]+(?:\.[0-9]+)?)s",
+            r"seconds:\s*([0-9]+(?:\.[0-9]+)?)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, message, re.IGNORECASE)
+            if match:
+                return min(float(match.group(1)), 60.0)
+
+        return min(15.0 * attempt, 60.0)
+
+    def _call_vertex_ai_with_retry(
+        self,
+        prompt: str,
+        ideal_diagram_path: Optional[str],
+        student_diagram_path: Optional[str],
+    ) -> Dict[str, Any]:
+        last_error: Optional[Exception] = None
+        for attempt in range(1, 5):
+            try:
+                return self._call_vertex_ai(prompt, ideal_diagram_path, student_diagram_path)
+            except Exception as error:  # pragma: no cover - retry path depends on external API behavior
+                last_error = error
+                if not self._is_retryable_vertex_error(error) or attempt == 4:
+                    raise
+                time.sleep(self._extract_retry_delay_seconds(error, attempt))
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Vertex AI request failed without an explicit error.")
+
     def evaluate_student(
         self,
         ideal_pdf_path: str,
@@ -456,7 +504,7 @@ Do not include any extra keys. Do not include explanations outside the JSON.
             )
 
             try:
-                data = self._call_vertex_ai(prompt, ideal_diag_path, student_diag_path)
+                data = self._call_vertex_ai_with_retry(prompt, ideal_diag_path, student_diag_path)
 
                 # Extract scores with safety
                 text_score = float(data.get("text_score", 0.0))
