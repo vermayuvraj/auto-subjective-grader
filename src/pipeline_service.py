@@ -82,22 +82,22 @@ def run_pipeline(
         min_area_ratio=0.003,
         min_center_y_ratio=0.45,
     )
+    import formula_pipeline
     ocr_pipeline.ensure_dir(config.ocr_root)
     os.makedirs(config.diagram_root, exist_ok=True)
+    os.makedirs(config.formula_root, exist_ok=True)
+    os.makedirs(config.formula_crop_root, exist_ok=True)
+
+    formula_cfg = formula_pipeline.FormulaConfig(
+        dpi=config.dpi,
+        poppler_path=config.poppler_path,
+        ocr_root=config.ocr_root,
+        output_root=config.formula_root,
+        crop_root=config.formula_crop_root,
+    )
 
     if engine == "SBERT":
         import evaluation_core
-        import formula_pipeline
-
-        formula_cfg = formula_pipeline.FormulaConfig(
-            dpi=config.dpi,
-            poppler_path=config.poppler_path,
-            ocr_root=config.ocr_root,
-            output_root=config.formula_root,
-            crop_root=config.formula_crop_root,
-        )
-        os.makedirs(config.formula_root, exist_ok=True)
-        os.makedirs(config.formula_crop_root, exist_ok=True)
         eval_cfg = evaluation_core.EvalConfig(
             ocr_root=config.ocr_root,
             diagram_root=config.diagram_root,
@@ -117,6 +117,7 @@ def run_pipeline(
         llm_cfg = llm_evaluator.LlmEvalConfig(
             ocr_root=config.ocr_root,
             diagram_root=config.diagram_root,
+            formula_root=config.formula_root,
             rubric_path=config.rubric_path,
         )
         report_cfg = report_generator.ReportConfig(
@@ -140,11 +141,10 @@ def run_pipeline(
     else:
         ocr_label = "Azure Document Intelligence"
 
-    if engine == "SBERT":
-        formula_reader = formula_pipeline.build_formula_reader()
+    formula_reader = formula_pipeline.build_formula_reader()
 
     num_students = len(student_pdf_paths)
-    total_steps = (3 + 5 * num_students) if engine == "SBERT" else (2 + 4 * num_students)
+    total_steps = 3 + 5 * num_students
     current_step = 0
 
     _notify(progress_callback, current_step, total_steps, f"Running OCR on ideal answer sheet with {ocr_label}...")
@@ -156,23 +156,22 @@ def run_pipeline(
         ocr_pipeline.ocr_pdf(spdf, ocr_cfg, reader)
         current_step += 1
 
-    if engine == "SBERT":
-        _notify(progress_callback, current_step, total_steps, "Extracting formulas for ideal answer sheet...")
+    _notify(progress_callback, current_step, total_steps, "Extracting formulas for ideal answer sheet...")
+    formula_pipeline.extract_formulas_for_pdf(
+        ideal_pdf_path,
+        formula_cfg,
+        formula_reader,
+    )
+    current_step += 1
+
+    for spdf in student_pdf_paths:
+        _notify(progress_callback, current_step, total_steps, f"Extracting formulas for {os.path.basename(spdf)}...")
         formula_pipeline.extract_formulas_for_pdf(
-            ideal_pdf_path,
+            spdf,
             formula_cfg,
             formula_reader,
         )
         current_step += 1
-
-        for spdf in student_pdf_paths:
-            _notify(progress_callback, current_step, total_steps, f"Extracting formulas for {os.path.basename(spdf)}...")
-            formula_pipeline.extract_formulas_for_pdf(
-                spdf,
-                formula_cfg,
-                formula_reader,
-            )
-            current_step += 1
 
     _notify(progress_callback, current_step, total_steps, "Extracting diagrams for ideal answer sheet...")
     diagram_extractor.extract_diagrams_for_pdf(ideal_pdf_path, diagram_cfg)

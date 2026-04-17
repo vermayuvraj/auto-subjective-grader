@@ -32,8 +32,8 @@ COPY src ./src
 COPY start-backend.sh ./start-backend.sh
 
 RUN mkdir -p /app/persistent_data/api_runs
-RUN chmod +x /app/start-backend.sh
+RUN sed -i 's/\r$//' /app/start-backend.sh && chmod +x /app/start-backend.sh
 
 EXPOSE 8001
 
-CMD ["/app/start-backend.sh"]
+CMD ["sh", "/app/start-backend.sh"]

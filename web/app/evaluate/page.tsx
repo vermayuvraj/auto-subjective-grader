@@ -22,6 +22,20 @@ type ReportLink = {
   download_url: string;
 };
 
+type QuestionResult = {
+  question_id: string;
+  score: number;
+  max_marks: number;
+};
+
+type StudentResult = {
+  student_base: string;
+  total_score: number;
+  max_total: number;
+  percentage: number;
+  questions: QuestionResult[];
+};
+
 type RunMeta = {
   run_id: string;
   status: "queued" | "running" | "completed" | "failed";
@@ -41,6 +55,7 @@ type RunMeta = {
   report_dir: string | null;
   summary_rows: SummaryRow[];
   reports: ReportLink[];
+  results: StudentResult[];
   error: string | null;
 };
 
@@ -183,6 +198,60 @@ function getAveragePercentage(rows: SummaryRow[]): string {
   return `${average.toFixed(2)}%`;
 }
 
+function roundMarks(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function buildQuestionwiseRows(results: StudentResult[]): Array<Record<string, string>> {
+  const questionIds = Array.from(
+    new Set(results.flatMap((result) => result.questions.map((question) => question.question_id)))
+  ).sort((left, right) => {
+    const leftNumber = Number.parseInt(left.replace(/\D+/g, ""), 10);
+    const rightNumber = Number.parseInt(right.replace(/\D+/g, ""), 10);
+
+    if (!Number.isNaN(leftNumber) && !Number.isNaN(rightNumber) && leftNumber !== rightNumber) {
+      return leftNumber - rightNumber;
+    }
+
+    return left.localeCompare(right);
+  });
+
+  return results.map((result) => {
+    const row: Record<string, string> = {
+      Student: result.student_base,
+    };
+
+    questionIds.forEach((questionId) => {
+      const question = result.questions.find((item) => item.question_id === questionId);
+      row[questionId] = question ? `${roundMarks(question.score)} / ${roundMarks(question.max_marks)}` : "--";
+    });
+
+    row.Total = `${roundMarks(result.total_score)} / ${roundMarks(result.max_total)}`;
+    return row;
+  });
+}
+
+function downloadCsv(filename: string, rows: Array<Record<string, string>>) {
+  if (!rows.length || typeof window === "undefined") {
+    return;
+  }
+
+  const headers = Object.keys(rows[0]);
+  const escapeCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const csv = [
+    headers.join(","),
+    ...rows.map((row) => headers.map((header) => escapeCell(row[header] ?? "")).join(",")),
+  ].join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 function getStatusTone(status: RunMeta["status"] | RunSummary["status"]): string {
   return `status-badge is-${status}`;
 }
@@ -253,12 +322,8 @@ function getStepsPerMinute(run: RunMeta | null): string {
 function getWorkflowBlocks(run: RunMeta | null): Array<WorkflowBlock & { state: string }> {
   const activeStage = inferWorkflowStage(run);
   const activeIndex = WORKFLOW_BLOCKS.findIndex((block) => block.key === activeStage);
-  const engine = run?.engine ?? "SBERT";
 
   return WORKFLOW_BLOCKS.map((block, index) => {
-    if (block.key === "formula" && engine !== "SBERT") {
-      return { ...block, state: "skipped" };
-    }
     if (run?.status === "completed") {
       return { ...block, state: "done" };
     }
@@ -321,14 +386,18 @@ export default function EvaluatePage() {
   const [historyLoadErrors, setHistoryLoadErrors] = useState<Record<string, string>>({});
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [isHostedDeployment, setIsHostedDeployment] = useState(false);
-  const hostedUsesSynchronousRuns = false;
 
   const requiresAzure = useMemo(() => ocrBackend === "azure", [ocrBackend]);
   const needsManualAzureSecrets = requiresAzure && !runtimeConfig?.azure_configured;
   const isPolling = currentRun ? ["queued", "running"].includes(currentRun.status) : false;
   const shouldUseUploadSessions = isHostedDeployment && (runtimeConfig?.durable_run_storage ?? true);
+  const hostedUsesSynchronousRuns = shouldUseUploadSessions;
   const workflowBlocks = useMemo(() => getWorkflowBlocks(currentRun), [currentRun]);
   const currentElapsed = useMemo(() => getRunElapsedSeconds(currentRun), [currentRun]);
+  const questionwiseRows = useMemo(
+    () => (currentRun?.results?.length ? buildQuestionwiseRows(currentRun.results) : []),
+    [currentRun]
+  );
 
   const lastCompletedRun = useMemo(
     () => runHistory.find((run) => run.status === "completed") ?? null,
@@ -570,9 +639,36 @@ export default function EvaluatePage() {
       let createdRun: RunMeta;
 
       if (shouldUseUploadSessions) {
-        setCurrentRun(null);
-        setSubmitStatus("Creating a background upload session...");
+        setSubmitStatus("Creating an upload session...");
         const sessionId = await createUploadSession();
+        const now = new Date().toISOString();
+        setCurrentRun({
+          run_id: sessionId,
+          status: "running",
+          engine: effectiveEngine,
+          ocr_backend: effectiveOcrBackend,
+          student_count: studentPdfs.length,
+          created_at: now,
+          started_at: now,
+          completed_at: null,
+          current_step: 1,
+          total_steps: WORKFLOW_BLOCKS.length,
+          progress_percent: 6,
+          message: "Upload session created. Preparing files for the cloud run.",
+          events: [
+            {
+              timestamp: now,
+              message: "Upload session created.",
+            },
+          ],
+          elapsed_seconds: null,
+          eval_dir: null,
+          report_dir: null,
+          summary_rows: [],
+          reports: [],
+          results: [],
+          error: null,
+        });
 
         const uploadQueue: Array<{
           kind: "ideal_pdf" | "rubric_json" | "student_pdf";
@@ -590,10 +686,42 @@ export default function EvaluatePage() {
 
         for (const [index, item] of uploadQueue.entries()) {
           setSubmitStatus(`Uploading ${item.label} (${index + 1}/${uploadQueue.length})...`);
+          setCurrentRun((current) =>
+            current
+              ? {
+                  ...current,
+                  message: `Uploading ${item.label} (${index + 1}/${uploadQueue.length})...`,
+                  progress_percent: Math.min(18 + Math.round(((index + 1) / uploadQueue.length) * 18), 36),
+                  events: [
+                    ...current.events,
+                    {
+                      timestamp: new Date().toISOString(),
+                      message: `Uploaded ${item.label}.`,
+                    },
+                  ].slice(-20),
+                }
+              : current
+          );
           await uploadSessionFile(sessionId, item.kind, item.file);
         }
 
-        setSubmitStatus("All files uploaded. Creating the evaluation job...");
+        setSubmitStatus("All files uploaded. Starting the cloud evaluation...");
+        setCurrentRun((current) =>
+          current
+            ? {
+                ...current,
+                message: "Files uploaded. Starting the cloud evaluation...",
+                progress_percent: 40,
+                events: [
+                  ...current.events,
+                  {
+                    timestamp: new Date().toISOString(),
+                    message: "Files validated and submitted to the pipeline.",
+                  },
+                ].slice(-20),
+              }
+            : current
+        );
         createdRun = await createJobFromUploadSession(sessionId, effectiveEngine, effectiveOcrBackend);
       } else {
         const formData = new FormData();
@@ -639,6 +767,7 @@ export default function EvaluatePage() {
             report_dir: null,
             summary_rows: [],
             reports: [],
+            results: [],
             error: null,
           });
         } else {
@@ -778,10 +907,10 @@ export default function EvaluatePage() {
 
               {isHostedDeployment ? (
                 <div className="status-card">
-                  <strong>Hosted mode now creates a background run immediately.</strong>
-                  The deployed interface sends the files to the production backend, stores a run
-                  ID, and updates the workflow live without making the browser wait on one long
-                  response.
+                  <strong>Hosted mode uploads first, then runs one managed cloud evaluation.</strong>
+                  The deployed interface sends the files one by one, then completes the production
+                  run on the backend in a single reliable pass so handwritten workflows stay more
+                  stable.
                 </div>
               ) : (
                 <div className="status-card">
@@ -811,7 +940,8 @@ export default function EvaluatePage() {
                 <div className="status-card">
                   <strong>Gemini on Vertex AI is ready.</strong>
                   The backend will authenticate with Google Cloud credentials instead of a
-                  standalone Gemini API key, which is better suited for your deployed runs.
+                  standalone Gemini API key, and formula parsing now runs before Gemini scoring
+                  whenever formulas are detected.
                 </div>
               ) : null}
 
@@ -875,7 +1005,7 @@ export default function EvaluatePage() {
               <h3>Live workflow tracker</h3>
               <p>
                 Follow the run from input validation to report generation with a cleaner stage view
-                and execution timeline.
+                and live progress tracker.
               </p>
             </div>
 
@@ -934,8 +1064,8 @@ export default function EvaluatePage() {
               <div className="empty-state">
                 <strong>{submitStatus}</strong>
                 <span>
-                  The hosted backend is uploading the files one by one before starting the job, so
-                  larger batches do not fail on a single oversized request.
+                  The hosted backend uploads files one by one, then completes the cloud run in a
+                  single request so larger handwritten batches do not die in a background thread.
                 </span>
               </div>
             ) : (
@@ -1021,6 +1151,43 @@ export default function EvaluatePage() {
               </tbody>
             </table>
           </div>
+
+          {questionwiseRows.length ? (
+            <div className="table-shell">
+              <div className="table-shell__header">
+                <div>
+                  <h3>Question-wise marks table</h3>
+                  <p>Download the full marksheet with each student&apos;s question-wise scores and total.</p>
+                </div>
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={() => downloadCsv(`${currentRun.run_id}-questionwise-marks.csv`, questionwiseRows)}
+                >
+                  <IconDownload width={14} height={14} />
+                  Download CSV
+                </button>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    {Object.keys(questionwiseRows[0]).map((header) => (
+                      <th key={header}>{header}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {questionwiseRows.map((row) => (
+                    <tr key={row.Student}>
+                      {Object.entries(row).map(([key, value]) => (
+                        <td key={`${row.Student}-${key}`}>{value}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </SectionShell>
       ) : null}
 

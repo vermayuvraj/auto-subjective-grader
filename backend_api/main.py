@@ -553,7 +553,7 @@ def _execute_job(
     engine: str,
     ocr_backend: str,
     azure_settings: Dict[str, str],
-) -> None:
+) -> Dict[str, Any]:
     with PIPELINE_RUN_LOCK:
         meta = _load_run_meta(run_id).copy()
         meta["status"] = "running"
@@ -596,6 +596,7 @@ def _execute_job(
             _append_event(meta, "Evaluation completed successfully.")
             _sync_remote_reports(run_id, meta.get("report_dir"))
             _persist_job_meta(run_id, meta, sync_remote=True)
+            return meta
 
         except Exception as exc:
             meta = _load_run_meta(run_id).copy()
@@ -609,6 +610,32 @@ def _execute_job(
             )
             _append_event(meta, f"Evaluation failed: {exc}")
             _persist_job_meta(run_id, meta, sync_remote=True)
+            raise
+
+
+def _execute_job_background(
+    run_id: str,
+    rubric_dict: Dict[str, Any],
+    ideal_pdf_path: str,
+    student_paths: List[str],
+    service_config: PipelineServiceConfig,
+    engine: str,
+    ocr_backend: str,
+    azure_settings: Dict[str, str],
+) -> None:
+    try:
+        _execute_job(
+            run_id,
+            rubric_dict,
+            ideal_pdf_path,
+            student_paths,
+            service_config,
+            engine,
+            ocr_backend,
+            azure_settings,
+        )
+    except Exception:
+        LOGGER.exception("Evaluation job %s failed during background execution.", run_id)
 
 
 def _list_run_summaries() -> List[Dict[str, Any]]:
@@ -790,7 +817,7 @@ def create_job(
         _persist_job_meta(run_id, meta)
 
     worker = threading.Thread(
-        target=_execute_job,
+        target=_execute_job_background,
         args=(
             run_id,
             rubric_dict,
@@ -875,8 +902,24 @@ def create_job_from_upload_session(
         _append_event(meta, execution_settings["hosted_override_message"])
         _persist_job_meta(run_id, meta)
 
+    if os.getenv("K_SERVICE"):
+        try:
+            return _execute_job(
+                run_id,
+                rubric_dict,
+                ideal_pdf_path,
+                student_paths,
+                service_config,
+                execution_settings["engine"],
+                execution_settings["ocr_backend"],
+                azure_settings,
+            )
+        except Exception:
+            LOGGER.exception("Evaluation job %s failed during synchronous hosted execution.", run_id)
+            return _load_run_meta(run_id)
+
     worker = threading.Thread(
-        target=_execute_job,
+        target=_execute_job_background,
         args=(
             run_id,
             rubric_dict,
@@ -935,38 +978,17 @@ def evaluate_sync(
         rows_meta["message"] = execution_settings["hosted_override_message"]
         _append_event(rows_meta, execution_settings["hosted_override_message"])
     _persist_job_meta(run_id, rows_meta)
-
-    _, run_pipeline = _load_pipeline_service()
-    results, eval_dir, report_dir, elapsed = run_pipeline(
-        ideal_pdf_path=ideal_pdf_path,
-        student_pdf_paths=student_paths,
-        rubric_dict=rubric_dict,
-        engine=execution_settings["engine"],
-        ocr_backend=execution_settings["ocr_backend"],
-        config=service_config,
-        azure_settings=azure_settings,
-        progress_callback=_job_progress_callback(run_id),
-    )
-
-    rows = _summary_rows(results)
-    meta = _load_run_meta(run_id).copy()
-    meta.update(
-        {
-            "status": "completed",
-            "completed_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-            "elapsed_seconds": elapsed,
-            "eval_dir": eval_dir,
-            "report_dir": report_dir,
-            "summary_rows": rows,
-            "reports": _build_reports(run_id, rows),
-            "results": results,
-            "message": "Synchronous evaluation completed successfully.",
-            "progress_percent": 100,
-            "error": None,
-        }
-    )
-    _append_event(meta, "Synchronous evaluation completed successfully.")
-    _sync_remote_reports(run_id, meta.get("report_dir"))
-    _persist_job_meta(run_id, meta, sync_remote=True)
-
-    return meta
+    try:
+        return _execute_job(
+            run_id,
+            rubric_dict,
+            ideal_pdf_path,
+            student_paths,
+            service_config,
+            execution_settings["engine"],
+            execution_settings["ocr_backend"],
+            azure_settings,
+        )
+    except Exception:
+        LOGGER.exception("Evaluation job %s failed during synchronous API execution.", run_id)
+        return _load_run_meta(run_id)

@@ -29,6 +29,7 @@ from evaluation_core import (
     base_name_from_pdf,
     load_rubric,
 )
+from formula_evaluator import load_formula_page, score_formula_sets
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 
@@ -119,6 +120,7 @@ def _should_attempt_adc_project_resolution() -> bool:
 class LlmEvalConfig:
     ocr_root: str = "results/ocr"
     diagram_root: str = "results/diagrams"
+    formula_root: str = "results/formulas"
     rubric_path: str = "rubric.json"
     model_name: str = "gemini-2.5-flash"
     default_location: str = "global"
@@ -186,32 +188,38 @@ class LlmEvaluator:
 
     def _compute_component_max(self, rubric_for_q: Dict[str, Any]) -> Dict[str, float]:
         """
-        Compute max text and diagram marks based on rubric weights.
+        Compute max text, diagram, and formula marks based on rubric weights.
         """
         max_marks = float(rubric_for_q.get("max_marks", 10.0))
         text_w = float(rubric_for_q.get("text_weight", 0.7))
         diagram_w = float(rubric_for_q.get("diagram_weight", 0.3))
+        formula_w = float(rubric_for_q.get("formula_weight", 0.0))
 
-        total_w = text_w + diagram_w
+        total_w = text_w + diagram_w + formula_w
         if total_w <= 0:
             # default all marks to text if weights are invalid
             return {
                 "max_marks": max_marks,
                 "text_max": max_marks,
                 "diagram_max": 0.0,
+                "formula_max": 0.0,
                 "text_weight": 1.0,
                 "diagram_weight": 0.0,
+                "formula_weight": 0.0,
             }
 
         text_max = max_marks * text_w / total_w
         diagram_max = max_marks * diagram_w / total_w
+        formula_max = max_marks * formula_w / total_w
 
         return {
             "max_marks": max_marks,
             "text_max": text_max,
             "diagram_max": diagram_max,
+            "formula_max": formula_max,
             "text_weight": text_w,
             "diagram_weight": diagram_w,
+            "formula_weight": formula_w,
         }
 
     def _build_llm_prompt(
@@ -376,6 +384,7 @@ Do not include any extra keys. Do not include explanations outside the JSON.
               "max_marks": float,
               "text_similarity": float or None,
               "diagram_similarity": float or None,
+              "formula_similarity": float or None,
               "feedback": str,
             }, ...
           ]
@@ -398,6 +407,7 @@ Do not include any extra keys. Do not include explanations outside the JSON.
             max_marks = comp_max["max_marks"]
             text_max = comp_max["text_max"]
             diagram_max = comp_max["diagram_max"]
+            formula_max = comp_max["formula_max"]
 
             max_total += max_marks
 
@@ -411,6 +421,7 @@ Do not include any extra keys. Do not include explanations outside the JSON.
                         "max_marks": max_marks,
                         "text_similarity": 0.0,
                         "diagram_similarity": 0.0,
+                        "formula_similarity": 0.0,
                         "feedback": "No answer detected for this question.",
                     }
                 )
@@ -418,6 +429,8 @@ Do not include any extra keys. Do not include explanations outside the JSON.
 
             ideal_text = ideal_page_data.get("text", "")
             student_text = student_page_data.get("text", "")
+            ideal_formulas = load_formula_page(ideal_base, page_no, self.config.formula_root)
+            student_formulas = load_formula_page(student_base, page_no, self.config.formula_root)
 
             # Diagram paths (if exist)
             ideal_diag_path = os.path.join(
@@ -472,11 +485,31 @@ Do not include any extra keys. Do not include explanations outside the JSON.
                 score = 0.0
                 feedback = f"Automatic LLM grading failed: {e}"
 
+            formula_similarity = None
+            formula_feedback = ""
+            formula_score = 0.0
+            if formula_max > 0:
+                formula_similarity, formula_feedback = score_formula_sets(
+                    ideal_formulas,
+                    student_formulas,
+                )
+                if formula_similarity is not None:
+                    formula_score = max(0.0, min(formula_max, formula_similarity * formula_max))
+
+            score = max(0.0, min(max_marks, score + formula_score))
+
             total_score += score
 
             # Convert to similarity-style fractions (0..1) for compatibility
             text_sim = (text_score / text_max) if text_max > 0 else None
             diagram_sim = (diagram_score / diagram_max) if diagram_max > 0 else None
+            combined_feedback = feedback.strip()
+            if formula_similarity is not None and formula_feedback:
+                combined_feedback = (
+                    f"{combined_feedback} Formula check: {formula_feedback}".strip()
+                    if combined_feedback
+                    else f"Formula check: {formula_feedback}"
+                )
 
             results.append(
                 {
@@ -485,7 +518,8 @@ Do not include any extra keys. Do not include explanations outside the JSON.
                     "max_marks": max_marks,
                     "text_similarity": text_sim,
                     "diagram_similarity": diagram_sim,
-                    "feedback": feedback,
+                    "formula_similarity": formula_similarity,
+                    "feedback": combined_feedback or feedback,
                 }
             )
 
