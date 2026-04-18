@@ -80,6 +80,9 @@ type RuntimeConfig = {
   gemini_configured: boolean;
   durable_run_storage: boolean;
   allowed_origins: string[];
+  easyocr_use_gpu?: boolean;
+  max_parallel_pipelines?: number;
+  formula_autoskip_enabled?: boolean;
 };
 
 type UploadSessionResponse = {
@@ -266,6 +269,9 @@ function inferWorkflowStage(run: RunMeta | null): string {
   }
 
   const message = run.message.toLowerCase();
+  if (message.includes("formula parsing not needed") || message.includes("no formula cues")) {
+    return "diagram";
+  }
   if (message.includes("report")) {
     return "report";
   }
@@ -319,11 +325,26 @@ function getStepsPerMinute(run: RunMeta | null): string {
   return `${speed.toFixed(2)} steps/min`;
 }
 
+function formulaMarkedNotNeeded(run: RunMeta | null): boolean {
+  if (!run) {
+    return false;
+  }
+
+  const messages = [run.message, ...run.events.map((event) => event.message)].map((value) => value.toLowerCase());
+  return messages.some(
+    (message) => message.includes("formula parsing not needed") || message.includes("no formula cues")
+  );
+}
+
 function getWorkflowBlocks(run: RunMeta | null): Array<WorkflowBlock & { state: string }> {
   const activeStage = inferWorkflowStage(run);
   const activeIndex = WORKFLOW_BLOCKS.findIndex((block) => block.key === activeStage);
+  const formulaNotNeeded = formulaMarkedNotNeeded(run);
 
   return WORKFLOW_BLOCKS.map((block, index) => {
+    if (block.key === "formula" && formulaNotNeeded) {
+      return { ...block, state: "skipped" };
+    }
     if (run?.status === "completed") {
       return { ...block, state: "done" };
     }
@@ -909,8 +930,8 @@ export default function EvaluatePage() {
                 <div className="status-card">
                   <strong>Hosted mode uploads first, then runs one managed cloud evaluation.</strong>
                   The deployed interface sends the files one by one, then completes the production
-                  run on the backend in a single reliable pass so handwritten workflows stay more
-                  stable.
+                  run on the backend with a bounded worker scheduler so larger handwritten workflows
+                  stay more stable.
                 </div>
               ) : (
                 <div className="status-card">
@@ -942,6 +963,21 @@ export default function EvaluatePage() {
                   The backend will authenticate with Google Cloud credentials instead of a
                   standalone Gemini API key, and formula parsing now runs before Gemini scoring
                   whenever formulas are detected.
+                </div>
+              ) : null}
+
+              {runtimeConfig ? (
+                <div className="status-card">
+                  <strong>Runtime scheduler status.</strong>
+                  {" "}
+                  {runtimeConfig.formula_autoskip_enabled === false
+                    ? "Formula auto-skip is disabled."
+                    : "Formula auto-skip is enabled."}
+                  {" "}
+                  The backend currently allows up to {runtimeConfig.max_parallel_pipelines ?? 1} pipeline run(s) per instance.
+                  {typeof runtimeConfig.easyocr_use_gpu === "boolean"
+                    ? ` EasyOCR GPU mode is ${runtimeConfig.easyocr_use_gpu ? "enabled" : "disabled"} on the backend.`
+                    : ""}
                 </div>
               ) : null}
 
@@ -1052,7 +1088,9 @@ export default function EvaluatePage() {
                           <strong>{block.title}</strong>
                           <span>{block.detail}</span>
                         </div>
-                        <span className="workflow-simple-item__state">{block.state}</span>
+                        <span className="workflow-simple-item__state">
+                          {block.state === "skipped" ? "Not needed" : block.state}
+                        </span>
                       </article>
                     );
                   })}

@@ -1,81 +1,81 @@
 {
   "1": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
+    "text_weight": 0.1,
+    "diagram_weight": 0.6,
+    "formula_weight": 0.3,
     "penalize_missing_diagram": true,
     "penalize_missing_formula": true
   },
   "2": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
+    "text_weight": 0.3,
+    "diagram_weight": 0.5,
     "formula_weight": 0.2,
     "penalize_missing_diagram": true,
     "penalize_missing_formula": true
   },
   "3": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
+    "text_weight": 0.2,
+    "diagram_weight": 0.1,
+    "formula_weight": 0.7,
     "penalize_missing_diagram": true,
     "penalize_missing_formula": true
   },
   "4": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
+    "text_weight": 0.1,
+    "diagram_weight": 0.8,
+    "formula_weight": 0.1,
     "penalize_missing_diagram": true,
     "penalize_missing_formula": true
   },
   "5": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
+    "text_weight": 0.1,
+    "diagram_weight": 0.8,
+    "formula_weight": 0.1,
     "penalize_missing_diagram": true,
     "penalize_missing_formula": true
   },
   "6": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
+    "text_weight": 0.0,
+    "diagram_weight": 0.8,
     "formula_weight": 0.2,
     "penalize_missing_diagram": true,
     "penalize_missing_formula": true
   },
   "7": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
+    "text_weight": 0.4,
+    "diagram_weight": 0.6,
+    "formula_weight": 0.0,
     "penalize_missing_diagram": true,
     "penalize_missing_formula": true
   },
   "8": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
+    "text_weight": 0.0,
+    "diagram_weight": 0.9,
+    "formula_weight": 0.1,
     "penalize_missing_diagram": true,
     "penalize_missing_formula": true
   },
   "9": {
     "max_marks": 10,
-    "text_weight": 0.6,
+    "text_weight": 0.2,
     "diagram_weight": 0.4,
-    "formula_weight": 0.2,
+    "formula_weight": 0.4,
     "penalize_missing_diagram": true,
     "penalize_missing_formula": true
   },
   "10": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
+    "text_weight": 0.4,
+    "diagram_weight": 0.6,
+    "formula_weight": 0.0,
     "penalize_missing_diagram": true,
     "penalize_missing_formula": true
   }

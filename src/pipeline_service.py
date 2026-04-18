@@ -326,8 +326,6 @@ def run_pipeline(
     else:
         ocr_label = "Azure Document Intelligence"
 
-    formula_reader = _get_formula_reader()
-
     doc_paths = [ideal_pdf_path, *student_pdf_paths]
     num_students = len(student_pdf_paths)
     max_total_steps = (len(doc_paths) * 3) + (2 * num_students)
@@ -366,6 +364,7 @@ def run_pipeline(
         1 if config.use_gpu else 2,
     )
     if formula_docs:
+        formula_reader = _get_formula_reader()
         tracker.emit(f"Extracting formulas for {len(formula_docs)} document(s)...")
 
         def formula_task(pdf_path: str) -> Dict[int, str]:

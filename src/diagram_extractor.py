@@ -1,14 +1,3 @@
-"""
-Step 2: Diagram Extraction (Connected Components based)
-
-- Converts each PDF page to an image
-- Detects all non-white "ink" pixels
-- Runs connected components to find visual blocks
-- Filters out small components (text) and keeps only large ones in the lower
-  half of the page (where your diagrams live)
-- Unions these components and crops a tight diagram region
-- Saves diagrams as PNG under results/diagrams/
-"""
 
 import os
 from dataclasses import dataclass
