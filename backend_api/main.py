@@ -41,7 +41,7 @@ RUN_ARTIFACT_STORE = RunArtifactStore(
 
 JOB_CACHE: Dict[str, Dict[str, Any]] = {}
 JOB_CACHE_LOCK = threading.Lock()
-PIPELINE_RUN_LOCK = threading.Lock()
+PIPELINE_RUN_SEMAPHORE = threading.Semaphore(max(1, SETTINGS.max_parallel_pipelines))
 LOGGER = logging.getLogger(__name__)
 UPLOAD_SESSION_PREFIX = "_upload_sessions"
 
@@ -437,6 +437,13 @@ def _prepare_run_inputs_from_upload_session(
         report_sbert_root=str(outputs_dir / "reports"),
         eval_llm_root=str(outputs_dir / "eval_llm"),
         report_llm_root=str(outputs_dir / "reports_llm"),
+        ocr_workers=SETTINGS.ocr_workers,
+        diagram_workers=SETTINGS.diagram_workers,
+        formula_workers=SETTINGS.formula_workers,
+        sbert_eval_workers=SETTINGS.sbert_eval_workers,
+        llm_eval_workers=SETTINGS.llm_eval_workers,
+        report_workers=SETTINGS.report_workers,
+        enable_formula_autoskip=SETTINGS.enable_formula_autoskip,
     )
 
     azure_settings = {
@@ -515,6 +522,13 @@ def _prepare_run_inputs(
         report_sbert_root=str(outputs_dir / "reports"),
         eval_llm_root=str(outputs_dir / "eval_llm"),
         report_llm_root=str(outputs_dir / "reports_llm"),
+        ocr_workers=SETTINGS.ocr_workers,
+        diagram_workers=SETTINGS.diagram_workers,
+        formula_workers=SETTINGS.formula_workers,
+        sbert_eval_workers=SETTINGS.sbert_eval_workers,
+        llm_eval_workers=SETTINGS.llm_eval_workers,
+        report_workers=SETTINGS.report_workers,
+        enable_formula_autoskip=SETTINGS.enable_formula_autoskip,
     )
 
     azure_settings = {
@@ -607,11 +621,11 @@ def _execute_job(
     ocr_backend: str,
     azure_settings: Dict[str, str],
 ) -> Dict[str, Any]:
-    with PIPELINE_RUN_LOCK:
+    with PIPELINE_RUN_SEMAPHORE:
         meta = _load_run_meta(run_id).copy()
         meta["status"] = "running"
         meta["started_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
-        meta["message"] = "Pipeline is now running."
+        meta["message"] = "Pipeline is now running with the optimized bounded worker scheduler."
         _append_event(meta, "Execution started.")
         _persist_job_meta(run_id, meta)
 
@@ -780,6 +794,9 @@ def get_runtime_config() -> Dict[str, Any]:
         "gemini_configured": SETTINGS.gemini_configured,
         "durable_run_storage": RUN_ARTIFACT_STORE.enabled,
         "allowed_origins": SETTINGS.allowed_origins,
+        "easyocr_use_gpu": SETTINGS.easyocr_use_gpu,
+        "max_parallel_pipelines": SETTINGS.max_parallel_pipelines,
+        "formula_autoskip_enabled": SETTINGS.enable_formula_autoskip,
     }
 
 

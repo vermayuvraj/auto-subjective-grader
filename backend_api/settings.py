@@ -24,6 +24,16 @@ def _read_csv(name: str, default: List[str]) -> List[str]:
     return [item for item in items if item]
 
 
+def _read_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw.strip())
+    except ValueError:
+        return default
+
+
 def _default_adc_path() -> Optional[str]:
     if os.name == "nt":
         appdata = os.getenv("APPDATA")
@@ -65,6 +75,14 @@ class AppSettings:
     vertex_ai_project: Optional[str]
     vertex_ai_location: str
     gemini_configured: bool
+    max_parallel_pipelines: int
+    ocr_workers: int
+    diagram_workers: int
+    formula_workers: int
+    sbert_eval_workers: int
+    llm_eval_workers: int
+    report_workers: int
+    enable_formula_autoskip: bool
 
 
 def _resolve_vertex_ai_project() -> Optional[str]:
@@ -119,4 +137,12 @@ def load_settings(project_root: Path) -> AppSettings:
         vertex_ai_project=vertex_ai_project,
         vertex_ai_location=vertex_ai_location,
         gemini_configured=bool(vertex_ai_project),
+        max_parallel_pipelines=_read_int("MAX_PARALLEL_PIPELINES", 1),
+        ocr_workers=_read_int("PIPELINE_OCR_WORKERS", 2),
+        diagram_workers=_read_int("PIPELINE_DIAGRAM_WORKERS", 4),
+        formula_workers=_read_int("PIPELINE_FORMULA_WORKERS", 1),
+        sbert_eval_workers=_read_int("PIPELINE_SBERT_EVAL_WORKERS", 1),
+        llm_eval_workers=_read_int("PIPELINE_LLM_EVAL_WORKERS", 3),
+        report_workers=_read_int("PIPELINE_REPORT_WORKERS", 4),
+        enable_formula_autoskip=_read_bool("ENABLE_FORMULA_AUTOSKIP", True),
     )

@@ -12,7 +12,7 @@ import os
 import re
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 os.environ.setdefault("NO_ALBUMENTATIONS_UPDATE", "1")
 
@@ -47,6 +47,14 @@ class FormulaConfig:
     padding_px: int = 18
     min_crop_width_px: int = 36
     min_crop_height_px: int = 20
+
+
+@dataclass
+class FormulaDetectionResult:
+    needs_formula: bool
+    candidate_pages: Optional[List[int]]
+    reason: str
+    rubric_hint: bool = False
 
 
 def ensure_dir(path: str) -> None:
@@ -114,6 +122,46 @@ def _normalize_inline_text(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "")).strip()
 
 
+FORMULA_KEYWORD_PATTERN = re.compile(
+    r"\b(?:formula|equation|solve|derive|derivative|integral|differentiate|simplify|"
+    r"matrix|vector|theorem|proof|algebra|geometry|trigonometry|probability|"
+    r"statistics|quadratic|polynomial|fraction|ratio|mean|median|variance|"
+    r"sin|cos|tan|cot|sec|cosec|log|ln|sqrt|theta|alpha|beta|gamma|delta|sigma|pi)\b",
+    re.IGNORECASE,
+)
+FORMULA_SYMBOL_PATTERN = re.compile(r"[=+\-*/^<>∑∫√≈≤≥±×÷]")
+
+
+def _iter_string_fragments(value: Any) -> Iterable[str]:
+    if isinstance(value, str):
+        yield value
+        return
+
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _iter_string_fragments(item)
+        return
+
+    if isinstance(value, list):
+        for item in value:
+            yield from _iter_string_fragments(item)
+
+
+def rubric_suggests_formula_work(rubric_dict: Optional[Dict[str, Any]]) -> bool:
+    if not rubric_dict:
+        return False
+
+    for fragment in _iter_string_fragments(rubric_dict):
+        normalized = _normalize_inline_text(fragment)
+        if not normalized:
+            continue
+        if FORMULA_KEYWORD_PATTERN.search(normalized):
+            return True
+        if len(FORMULA_SYMBOL_PATTERN.findall(normalized)) >= 2:
+            return True
+    return False
+
+
 def _looks_formula_like(text: str) -> bool:
     text = _normalize_inline_text(text)
     if not text:
@@ -176,6 +224,76 @@ def _looks_formula_like(text: str) -> bool:
         return True
 
     return False
+
+
+def _page_formula_score(ocr_page: Dict[str, Any]) -> Tuple[int, int]:
+    page_text = _normalize_inline_text(str(ocr_page.get("text", "")))
+    blocks = list(ocr_page.get("blocks", []) or [])
+
+    line_hits = 0
+    symbol_hits = len(FORMULA_SYMBOL_PATTERN.findall(page_text))
+
+    for line in _group_blocks_into_lines(blocks, tolerance_px=20):
+        line_text = _normalize_inline_text(
+            " ".join(str(item["block"].get("text", "")) for item in line)
+        )
+        if _looks_formula_like(line_text):
+            line_hits += 1
+
+    if FORMULA_KEYWORD_PATTERN.search(page_text):
+        line_hits += 1
+
+    return line_hits, symbol_hits
+
+
+def detect_formula_pages_for_pdf(
+    pdf_path: str,
+    config: FormulaConfig,
+    rubric_dict: Optional[Dict[str, Any]] = None,
+) -> FormulaDetectionResult:
+    base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+    rubric_hint = rubric_suggests_formula_work(rubric_dict)
+    candidate_pages: List[int] = []
+    known_pages: Set[int] = set()
+
+    for entry in os.listdir(config.ocr_root) if os.path.isdir(config.ocr_root) else []:
+        match = re.fullmatch(rf"{re.escape(base_name)}_page(\d+)\.json", entry)
+        if not match:
+            continue
+        known_pages.add(int(match.group(1)))
+
+    for page_no in sorted(known_pages):
+        ocr_page = _load_ocr_page(base_name, page_no, config.ocr_root)
+        line_hits, symbol_hits = _page_formula_score(ocr_page)
+        if line_hits >= 1:
+            candidate_pages.append(page_no)
+            continue
+
+        if rubric_hint and symbol_hits >= 5:
+            candidate_pages.append(page_no)
+
+    if candidate_pages:
+        return FormulaDetectionResult(
+            needs_formula=True,
+            candidate_pages=candidate_pages,
+            reason=f"Detected formula cues on {len(candidate_pages)} page(s).",
+            rubric_hint=rubric_hint,
+        )
+
+    if rubric_hint and known_pages:
+        return FormulaDetectionResult(
+            needs_formula=True,
+            candidate_pages=sorted(known_pages),
+            reason="Rubric indicates formula-heavy grading, so all pages will be checked.",
+            rubric_hint=True,
+        )
+
+    return FormulaDetectionResult(
+        needs_formula=False,
+        candidate_pages=[],
+        reason="No formula cues were detected in the rubric or OCR text.",
+        rubric_hint=rubric_hint,
+    )
 
 
 def _group_blocks_into_lines(
@@ -271,6 +389,7 @@ def extract_formulas_for_pdf(
     pdf_path: str,
     config: FormulaConfig,
     formula_reader=None,
+    candidate_pages: Optional[List[int]] = None,
 ) -> Dict[int, str]:
     if formula_reader is None:
         formula_reader = build_formula_reader()
@@ -280,10 +399,17 @@ def extract_formulas_for_pdf(
     ensure_dir(config.output_root)
 
     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+    selected_pages = set(candidate_pages or [])
+    if candidate_pages is not None and not selected_pages:
+        return {}
+
     images = pdf_to_images(pdf_path, config)
     page_outputs: Dict[int, str] = {}
 
     for page_no, pil_img in enumerate(images, start=1):
+        if selected_pages and page_no not in selected_pages:
+            continue
+
         ocr_page = _load_ocr_page(base_name, page_no, config.ocr_root)
         blocks = list(ocr_page.get("blocks", []) or [])
         lines = _group_blocks_into_lines(blocks, config.line_merge_tolerance_px)

@@ -1,24 +1,30 @@
 const CLOUD_RUN_API_BASE_URL =
-  "https://auto-subjective-grader-api-217944702445.asia-south1.run.app";
+  "https://auto-subjective-grader-api-gpu-217944702445.asia-southeast1.run.app";
+
+function normalizeBaseUrl(value?: string | null): string {
+  return (value || "").trim().replace(/\/+$/, "");
+}
 
 const SERVER_API_BASE_URL =
   process.env.NODE_ENV === "development"
-    ? process.env.BACKEND_API_BASE_URL ||
-      process.env.NEXT_PUBLIC_API_BASE_URL ||
+    ? normalizeBaseUrl(process.env.BACKEND_API_BASE_URL) ||
+      normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) ||
       "http://127.0.0.1:8001"
-    : CLOUD_RUN_API_BASE_URL;
+    : normalizeBaseUrl(process.env.BACKEND_API_BASE_URL) ||
+      normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) ||
+      CLOUD_RUN_API_BASE_URL;
 
 const PUBLIC_API_BASE_URL =
   process.env.NODE_ENV === "development"
-    ? process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, "")
-    : CLOUD_RUN_API_BASE_URL;
+    ? normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL)
+    : normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) || CLOUD_RUN_API_BASE_URL;
 
 export const BROWSER_API_BASE_URL = PUBLIC_API_BASE_URL
   ? `${PUBLIC_API_BASE_URL}/api`
   : "/api";
 
 export function getServerApiBaseUrl(): string {
-  return SERVER_API_BASE_URL.replace(/\/+$/, "");
+  return normalizeBaseUrl(SERVER_API_BASE_URL);
 }
 
 export async function fetchJson<T>(path: string, fallback: T): Promise<T> {
