@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_PREFER_BINARY=1 \
-    EASYOCR_USE_GPU=false \
+    EASYOCR_USE_GPU=true \
     API_RUNS_ROOT=/app/persistent_data/api_runs
 
 WORKDIR /app
@@ -25,6 +25,8 @@ COPY README.md ./README.md
 COPY rubric.json ./rubric.json
 COPY requirements.backend.txt ./requirements.backend.txt
 RUN python -m pip install --upgrade "pip<24.1" setuptools wheel && \
+    pip install --index-url https://download.pytorch.org/whl/cu124 \
+      torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 && \
     pip install --prefer-binary -r requirements.backend.txt
 
 COPY backend_api ./backend_api

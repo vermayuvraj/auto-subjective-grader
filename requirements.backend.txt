@@ -1,6 +1,8 @@
 # Backend-only requirements for the FastAPI deployment image.
 # This intentionally excludes Streamlit and other local-only UI packages
 # to keep Docker builds predictable on Azure.
+# GPU-enabled torch/torchvision/torchaudio are installed separately in the Dockerfile
+# so the Cloud Run image can use CUDA while local Windows installs can choose their own wheel.
 
 numpy==2.1.2
 pillow==11.3.0

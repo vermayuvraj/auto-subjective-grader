@@ -17,6 +17,7 @@ import evaluation_core
 import formula_pipeline
 import llm_evaluator
 import ocr_pipeline
+import pipeline_service
 import report_generator
 
 
@@ -1315,6 +1316,8 @@ def format_duration(duration_seconds: float) -> str:
 
 def infer_workflow_stage(message: str, engine: str) -> str:
     message_lc = message.lower()
+    if "formula parsing not needed" in message_lc or "no formula cues" in message_lc:
+        return "diagram"
     if "report" in message_lc:
         return "report"
     if "evaluat" in message_lc:
@@ -1344,17 +1347,25 @@ def build_workflow_html(
     current_step: int,
     total_steps: int,
     elapsed_seconds: float,
+    history_messages: Optional[List[str]] = None,
 ) -> str:
     active_stage = infer_workflow_stage(current_message, engine)
     display_step = visible_workflow_step(current_step, total_steps, current_message)
     steps_per_minute = (current_step / max(elapsed_seconds, 0.001)) * 60 if current_step else 0.0
     stage_order = [block["key"] for block in WORKFLOW_BLOCKS]
     active_index = stage_order.index(active_stage) if active_stage in stage_order else 0
+    formula_not_needed = any(
+        "formula parsing not needed" in message.lower() or "no formula cues" in message.lower()
+        for message in (history_messages or [current_message])
+    )
 
     blocks_html: List[str] = []
     for index, block in enumerate(WORKFLOW_BLOCKS):
         key = block["key"]
-        if index < active_index:
+        if key == "formula" and formula_not_needed:
+            state_class = "skipped"
+            state_label = "Not Needed"
+        elif index < active_index:
             state_class = "done"
             state_label = "Done"
         elif key == active_stage:
@@ -1492,6 +1503,28 @@ def build_questionwise_rows(results: List[Dict[str, Any]]) -> List[Dict[str, Any
     return table_rows
 
 
+def get_local_runtime_status(ocr_backend: str) -> Dict[str, str]:
+    try:
+        import torch
+    except Exception as exc:
+        return {
+            "cuda_available": "No",
+            "device_name": f"Unavailable ({exc})",
+            "easyocr_gpu": "Disabled",
+            "torch_version": "Unavailable",
+        }
+
+    cuda_available = bool(torch.cuda.is_available())
+    device_name = torch.cuda.get_device_name(0) if cuda_available else "CPU only"
+    easyocr_gpu = "Enabled" if ocr_backend == "easyocr" and cuda_available else "Disabled"
+    return {
+        "cuda_available": "Yes" if cuda_available else "No",
+        "device_name": device_name,
+        "easyocr_gpu": easyocr_gpu,
+        "torch_version": getattr(torch, "__version__", "Unknown"),
+    }
+
+
 def run_full_pipeline(
     ideal_pdf_path: str,
     student_pdf_paths: List[str],
@@ -1502,175 +1535,65 @@ def run_full_pipeline(
     progress_callback: Optional[Callable[[int, int, str, float], None]] = None,
 ) -> (List[Dict[str, Any]], str, str, float):
     started_at = time.perf_counter()
-
-    with open(RUBRIC_PATH, "w", encoding="utf-8") as f:
-        json.dump(rubric_dict, f, ensure_ascii=False, indent=2)
-
     azure_settings = azure_settings or {}
-    ocr_cfg = ocr_pipeline.OCRConfig(
-        dpi=300,
-        poppler_path=POPPLER_BIN,
-        languages=["en"],
-        use_gpu=True,
-        output_root=RESULTS_OCR_DIR,
-        backend=ocr_backend,
-        google_vision_language_hints=["en-t-i0-handwrit", "en"],
-        azure_document_intelligence_endpoint=azure_settings.get("endpoint"),
-        azure_document_intelligence_key=azure_settings.get("key"),
-    )
-    diagram_cfg = diagram_extractor.DiagramConfig(
-        dpi=300,
-        poppler_path=POPPLER_BIN,
-        output_root=RESULTS_DIAG_DIR,
-        min_area_ratio=0.003,
-        min_center_y_ratio=0.45,
-    )
-    formula_cfg = formula_pipeline.FormulaConfig(
-        dpi=300,
-        poppler_path=POPPLER_BIN,
-        ocr_root=RESULTS_OCR_DIR,
-        output_root=RESULTS_FORMULA_DIR,
-        crop_root=RESULTS_FORMULA_CROP_DIR,
-    )
-
-    ocr_pipeline.ensure_dir(RESULTS_OCR_DIR)
-    os.makedirs(RESULTS_DIAG_DIR, exist_ok=True)
-    os.makedirs(RESULTS_FORMULA_DIR, exist_ok=True)
-    os.makedirs(RESULTS_FORMULA_CROP_DIR, exist_ok=True)
-
-    if engine == "SBERT":
-        eval_cfg = evaluation_core.EvalConfig(
-            ocr_root=RESULTS_OCR_DIR,
-            diagram_root=RESULTS_DIAG_DIR,
-            formula_root=RESULTS_FORMULA_DIR,
-            rubric_path=RUBRIC_PATH,
-        )
-        report_cfg = report_generator.ReportConfig(
-            eval_root=RESULTS_EVAL_SBERT_DIR,
-            report_root=RESULTS_REPORT_SBERT_DIR,
-        )
-        evaluator = evaluation_core.Evaluator(eval_cfg)
-        eval_dir = RESULTS_EVAL_SBERT_DIR
-        report_dir = RESULTS_REPORT_SBERT_DIR
-    else:
-        llm_cfg = llm_evaluator.LlmEvalConfig(
-            ocr_root=RESULTS_OCR_DIR,
-            diagram_root=RESULTS_DIAG_DIR,
-            formula_root=RESULTS_FORMULA_DIR,
-            rubric_path=RUBRIC_PATH,
-        )
-        report_cfg = report_generator.ReportConfig(
-            eval_root=RESULTS_EVAL_LLM_DIR,
-            report_root=RESULTS_REPORT_LLM_DIR,
-        )
-        evaluator = llm_evaluator.LlmEvaluator(llm_cfg)
-        eval_dir = RESULTS_EVAL_LLM_DIR
-        report_dir = RESULTS_REPORT_LLM_DIR
-
-    os.makedirs(eval_dir, exist_ok=True)
-    os.makedirs(report_dir, exist_ok=True)
-
-    reader = None
-    formula_reader = None
-    if ocr_backend == "easyocr":
-        st.write("Initialising OCR (EasyOCR)...")
-        reader = ocr_pipeline.build_easyocr_reader(ocr_cfg)
-        ocr_label = "EasyOCR"
-    elif ocr_backend == "google_vision":
-        st.write("Initialising OCR (Google Vision AI handwritten mode)...")
-        ocr_label = "Google Vision AI"
-    else:
-        st.write("Initialising OCR (Azure Document Intelligence handwritten mode)...")
-        ocr_label = "Azure Document Intelligence"
-
-    st.write("Initialising formula OCR (pix2tex + SymPy)...")
-    formula_reader = formula_pipeline.build_formula_reader()
-
-    num_students = len(student_pdf_paths)
-    total_steps = 3 + 5 * num_students
-    current_step = 0
-
     progress_bar = None
     status_text = None
     if progress_callback is None:
         progress_bar = st.progress(0.0)
         status_text = st.empty()
 
-    def publish_progress(message: str) -> None:
+    def publish_progress(current_step: int, total_steps: int, message: str) -> None:
         elapsed = time.perf_counter() - started_at
-        if progress_callback is not None:
-            progress_callback(current_step, total_steps, message, elapsed)
-            return
-
         if status_text is not None:
             status_text.write(message)
         if progress_bar is not None:
             progress = current_step / max(total_steps, 1)
             progress_bar.progress(min(progress, 1.0))
+        if progress_callback is not None:
+            progress_callback(current_step, total_steps, message, elapsed)
 
-    publish_progress(f"Running OCR on ideal answer sheet with {ocr_label}...")
-    ocr_pipeline.ocr_pdf(ideal_pdf_path, ocr_cfg, reader)
-    current_step += 1
-    publish_progress(f"Running OCR on ideal answer sheet with {ocr_label}...")
+    try:
+        import torch
 
-    for spdf in student_pdf_paths:
-        publish_progress(
-            f"Running OCR on {os.path.basename(spdf)} with {ocr_label}..."
-        )
-        ocr_pipeline.ocr_pdf(spdf, ocr_cfg, reader)
-        current_step += 1
-        publish_progress(f"Running OCR on {os.path.basename(spdf)} with {ocr_label}...")
+        local_use_gpu = bool(torch.cuda.is_available())
+    except Exception:
+        local_use_gpu = False
 
-    publish_progress("Extracting formulas for ideal answer sheet...")
-    formula_pipeline.extract_formulas_for_pdf(
-        ideal_pdf_path,
-        formula_cfg,
-        formula_reader,
+    config = pipeline_service.PipelineServiceConfig(
+        poppler_path=POPPLER_BIN,
+        dpi=300,
+        use_gpu=local_use_gpu,
+        languages=["en"],
+        google_vision_language_hints=["en-t-i0-handwrit", "en"],
+        rubric_path=RUBRIC_PATH,
+        ocr_root=RESULTS_OCR_DIR,
+        diagram_root=RESULTS_DIAG_DIR,
+        formula_root=RESULTS_FORMULA_DIR,
+        formula_crop_root=RESULTS_FORMULA_CROP_DIR,
+        eval_sbert_root=RESULTS_EVAL_SBERT_DIR,
+        report_sbert_root=RESULTS_REPORT_SBERT_DIR,
+        eval_llm_root=RESULTS_EVAL_LLM_DIR,
+        report_llm_root=RESULTS_REPORT_LLM_DIR,
+        ocr_workers=1 if (ocr_backend == "easyocr" and local_use_gpu) else 4,
+        diagram_workers=6,
+        formula_workers=1 if local_use_gpu else 2,
+        sbert_eval_workers=1,
+        llm_eval_workers=4,
+        report_workers=6,
+        enable_formula_autoskip=True,
     )
-    current_step += 1
-    publish_progress("Extracting formulas for ideal answer sheet...")
 
-    for spdf in student_pdf_paths:
-        publish_progress(f"Extracting formulas for {os.path.basename(spdf)}...")
-        formula_pipeline.extract_formulas_for_pdf(
-            spdf,
-            formula_cfg,
-            formula_reader,
-        )
-        current_step += 1
-        publish_progress(f"Extracting formulas for {os.path.basename(spdf)}...")
-    publish_progress("Extracting diagrams for ideal answer sheet...")
-    diagram_extractor.extract_diagrams_for_pdf(ideal_pdf_path, diagram_cfg)
-    current_step += 1
-    publish_progress("Extracting diagrams for ideal answer sheet...")
+    all_results, eval_dir, report_dir, _ = pipeline_service.run_pipeline(
+        ideal_pdf_path=ideal_pdf_path,
+        student_pdf_paths=student_pdf_paths,
+        rubric_dict=rubric_dict,
+        engine=engine,
+        ocr_backend=ocr_backend,
+        config=config,
+        azure_settings=azure_settings,
+        progress_callback=publish_progress,
+    )
 
-    for spdf in student_pdf_paths:
-        publish_progress(f"Extracting diagrams for {os.path.basename(spdf)}...")
-        diagram_extractor.extract_diagrams_for_pdf(spdf, diagram_cfg)
-        current_step += 1
-        publish_progress(f"Extracting diagrams for {os.path.basename(spdf)}...")
-
-    all_results: List[Dict[str, Any]] = []
-    for spdf in student_pdf_paths:
-        student_name = os.path.splitext(os.path.basename(spdf))[0]
-        engine_prefix = "[SBERT]" if engine == "SBERT" else "[Gemini LLM]"
-        publish_progress(f"{engine_prefix} Evaluating {student_name}...")
-
-        result = evaluator.evaluate_student(ideal_pdf_path, spdf)
-        all_results.append(result)
-        current_step += 1
-        publish_progress(f"Generating report for {student_name}...")
-
-        json_path = os.path.join(eval_dir, f"{result['student_base']}_eval.json")
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
-
-        report_generator.generate_pdf_from_result(result, report_cfg)
-
-        current_step += 1
-        publish_progress(f"Generating report for {student_name}...")
-
-    publish_progress("All evaluations complete.")
     if progress_bar is not None:
         progress_bar.progress(1.0)
     time.sleep(0.25)
@@ -1879,6 +1802,21 @@ def render_evaluate_tab() -> None:
                 ).strip(),
             }
 
+        runtime_status = get_local_runtime_status(
+            "google_vision" if "Google Vision" in ocr_mode else "azure" if "Azure" in ocr_mode else "easyocr"
+        )
+        st.markdown(
+            f"""
+            <div class="results-note" style="margin: 0.9rem 0 0.2rem 0;">
+                <strong>CUDA available:</strong> {runtime_status['cuda_available']} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>Device:</strong> {runtime_status['device_name']} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>EasyOCR GPU:</strong> {runtime_status['easyocr_gpu']} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>Torch:</strong> {runtime_status['torch_version']}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         st.markdown("---")
         run_button = st.button("Run Evaluation", use_container_width=True, type="primary", key="run-eval")
 
@@ -1888,6 +1826,7 @@ def render_evaluate_tab() -> None:
     initial_workflow_message = (
         "Waiting for inputs. Once you click Run Evaluation, the workflow will track OCR, formulas, diagrams, scoring, and reports."
     )
+    workflow_history_messages = [initial_workflow_message]
     workflow_placeholder.markdown(
         build_workflow_html(
             engine="SBERT" if engine_choice.startswith("SBERT") else "LLM",
@@ -1895,6 +1834,7 @@ def render_evaluate_tab() -> None:
             current_step=0,
             total_steps=1,
             elapsed_seconds=0.0,
+            history_messages=workflow_history_messages,
         ),
         unsafe_allow_html=True,
     )
@@ -1947,8 +1887,10 @@ def render_evaluate_tab() -> None:
 
         ideal_pdf_path = save_uploaded_file(ideal_pdf, DATA_IDEAL_DIR)
         student_pdf_paths = [save_uploaded_file(f, DATA_STUDENTS_DIR) for f in student_pdfs]
+        workflow_history_messages = []
 
         def progress_callback(current_step: int, total_steps: int, message: str, elapsed_seconds: float) -> None:
+            workflow_history_messages.append(message)
             display_step = visible_workflow_step(current_step, total_steps, message)
             workflow_placeholder.markdown(
                 build_workflow_html(
@@ -1957,6 +1899,7 @@ def render_evaluate_tab() -> None:
                     current_step=current_step,
                     total_steps=total_steps,
                     elapsed_seconds=elapsed_seconds,
+                    history_messages=workflow_history_messages,
                 ),
                 unsafe_allow_html=True,
             )
@@ -1990,6 +1933,7 @@ def render_evaluate_tab() -> None:
                 current_step=1,
                 total_steps=1,
                 elapsed_seconds=elapsed_seconds,
+                history_messages=workflow_history_messages + ["All evaluations complete."],
             ),
             unsafe_allow_html=True,
         )
