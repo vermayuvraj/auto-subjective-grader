@@ -35,6 +35,8 @@ def pdf_to_images(pdf_path: str, config: DiagramConfig):
         pdf_path,
         dpi=config.dpi,
         poppler_path=config.poppler_path,
+        use_pdftocairo=True,
+        thread_count=max(1, min(4, (os.cpu_count() or 1))),
     )
     return images
 
@@ -133,17 +135,17 @@ def save_diagram_image(diagram_img, pdf_path: str, page_no: int, config: Diagram
     return out_path
 
 
-def extract_diagrams_for_pdf(pdf_path: str, config: DiagramConfig):
+def extract_diagrams_for_pdf(pdf_path: str, config: DiagramConfig, images=None):
     """
     Extract and save diagrams for each page of a single PDF.
     """
     print(f"[DIAGRAM] Processing PDF: {pdf_path}")
 
-    images = pdf_to_images(pdf_path, config)
+    page_images = images or pdf_to_images(pdf_path, config)
 
     diagram_paths: Dict[int, Optional[str]] = {}
 
-    for page_no, pil_img in enumerate(images, start=1):
+    for page_no, pil_img in enumerate(page_images, start=1):
         diagram_img = extract_diagram_from_page_cc(pil_img, config)
 
         if diagram_img is None:

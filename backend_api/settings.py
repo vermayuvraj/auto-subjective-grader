@@ -122,6 +122,13 @@ def load_settings(project_root: Path) -> AppSettings:
         or os.getenv("GOOGLE_CLOUD_LOCATION")
         or "global"
     )
+    easyocr_use_gpu = _read_bool("EASYOCR_USE_GPU", False)
+    default_ocr_workers = 3 if easyocr_use_gpu else 2
+    default_diagram_workers = 6 if easyocr_use_gpu else 4
+    default_formula_workers = 2 if easyocr_use_gpu else 1
+    default_sbert_workers = 2 if easyocr_use_gpu else 1
+    default_llm_workers = 4 if easyocr_use_gpu else 3
+    default_report_workers = 6 if easyocr_use_gpu else 4
 
     return AppSettings(
         poppler_path=poppler_path,
@@ -130,7 +137,7 @@ def load_settings(project_root: Path) -> AppSettings:
         api_runs_prefix=api_runs_prefix,
         readme_path=readme_path,
         allowed_origins=allowed_origins,
-        easyocr_use_gpu=_read_bool("EASYOCR_USE_GPU", False),
+        easyocr_use_gpu=easyocr_use_gpu,
         google_vision_language_hints=google_vision_language_hints,
         azure_endpoint=azure_endpoint,
         azure_key=azure_key,
@@ -138,11 +145,11 @@ def load_settings(project_root: Path) -> AppSettings:
         vertex_ai_location=vertex_ai_location,
         gemini_configured=bool(vertex_ai_project),
         max_parallel_pipelines=_read_int("MAX_PARALLEL_PIPELINES", 1),
-        ocr_workers=_read_int("PIPELINE_OCR_WORKERS", 2),
-        diagram_workers=_read_int("PIPELINE_DIAGRAM_WORKERS", 4),
-        formula_workers=_read_int("PIPELINE_FORMULA_WORKERS", 1),
-        sbert_eval_workers=_read_int("PIPELINE_SBERT_EVAL_WORKERS", 1),
-        llm_eval_workers=_read_int("PIPELINE_LLM_EVAL_WORKERS", 3),
-        report_workers=_read_int("PIPELINE_REPORT_WORKERS", 4),
+        ocr_workers=_read_int("PIPELINE_OCR_WORKERS", default_ocr_workers),
+        diagram_workers=_read_int("PIPELINE_DIAGRAM_WORKERS", default_diagram_workers),
+        formula_workers=_read_int("PIPELINE_FORMULA_WORKERS", default_formula_workers),
+        sbert_eval_workers=_read_int("PIPELINE_SBERT_EVAL_WORKERS", default_sbert_workers),
+        llm_eval_workers=_read_int("PIPELINE_LLM_EVAL_WORKERS", default_llm_workers),
+        report_workers=_read_int("PIPELINE_REPORT_WORKERS", default_report_workers),
         enable_formula_autoskip=_read_bool("ENABLE_FORMULA_AUTOSKIP", True),
     )

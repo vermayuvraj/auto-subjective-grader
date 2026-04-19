@@ -16,6 +16,7 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    fonts-dejavu-core \
     git \
     libglib2.0-0 \
     libgl1 \
@@ -30,31 +31,16 @@ COPY README.md ./README.md
 COPY rubric.json ./rubric.json
 COPY requirements.backend.txt ./requirements.backend.txt
 RUN python -m pip install --upgrade "pip<24.1" setuptools wheel && \
-    pip install --index-url https://download.pytorch.org/whl/cu121 \
-      torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 && \
-    pip install --prefer-binary -r requirements.backend.txt
+    pip install --prefer-binary -r requirements.backend.txt && \
+    pip install --force-reinstall --index-url https://download.pytorch.org/whl/cu118 \
+      torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0
 
 COPY backend_api ./backend_api
 COPY src ./src
 COPY start-backend.sh ./start-backend.sh
 
 RUN mkdir -p /app/persistent_data/api_runs /opt/model-cache/torch /opt/model-cache/huggingface /opt/model-cache/sentence-transformers /opt/model-cache/easyocr
-RUN python - <<'PY'
-import os
-
-os.environ.setdefault("NO_ALBUMENTATIONS_UPDATE", "1")
-
-from sentence_transformers import SentenceTransformer
-from transformers import CLIPModel, CLIPProcessor
-import easyocr
-from pix2tex.cli import LatexOCR
-
-SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
-CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-easyocr.Reader(["en"], gpu=False)
-LatexOCR()
-PY
+RUN python backend_api/preload_models.py
 RUN sed -i 's/\r$//' /app/start-backend.sh && chmod +x /app/start-backend.sh
 
 EXPOSE 8001

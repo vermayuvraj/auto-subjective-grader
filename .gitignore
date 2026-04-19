@@ -5,6 +5,7 @@ __pycache__/
 .env
 .env.local
 .env.production
+cloudrun-gpu-env.yaml
 web/.env.local
 web/.env.production
 

@@ -37,7 +37,8 @@ which are used by the Streamlit app.
 import os
 import json
 from dataclasses import dataclass
-from typing import Dict, Any
+from pathlib import Path
+from typing import Dict, Any, Optional
 
 from fpdf import FPDF
 
@@ -50,17 +51,62 @@ class ReportConfig:
     report_root: str = "results/reports"
 
 
+UNICODE_FONT_FAMILY = "DejaVuSans"
+
+
+def _find_font_path(font_name: str) -> Optional[str]:
+    candidates = [
+        Path("/usr/share/fonts/truetype/dejavu") / font_name,
+        Path("/usr/local/share/fonts") / font_name,
+        Path("C:/Windows/Fonts") / font_name,
+        Path("C:/ProgramData/anaconda3/Lib/site-packages/matplotlib/mpl-data/fonts/ttf") / font_name,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def _register_unicode_fonts(pdf: FPDF) -> str:
+    regular = _find_font_path("DejaVuSans.ttf")
+    if not regular:
+        return "Arial"
+
+    bold = _find_font_path("DejaVuSans-Bold.ttf")
+    italic = _find_font_path("DejaVuSans-Oblique.ttf")
+
+    pdf.add_font(UNICODE_FONT_FAMILY, "", regular)
+    pdf.add_font(UNICODE_FONT_FAMILY, "B", bold or regular)
+    pdf.add_font(UNICODE_FONT_FAMILY, "I", italic or regular)
+    return UNICODE_FONT_FAMILY
+
+
+def _safe_text(value: Any, fallback_family: str) -> str:
+    text = "" if value is None else str(value)
+    if fallback_family != "Arial":
+        return text
+    return (
+        text.encode("latin-1", errors="replace")
+        .decode("latin-1")
+        .replace("?", "-")
+    )
+
+
 # ---------- PDF helper ----------
 
 class ReportPDF(FPDF):
+    def __init__(self):
+        super().__init__()
+        self.font_family_name = _register_unicode_fonts(self)
+
     def header(self):
-        self.set_font("Arial", "B", 16)
+        self.set_font(self.font_family_name, "B", 16)
         self.cell(0, 10, "Automated Answer Sheet Evaluation", ln=1, align="C")
         self.ln(2)
 
     def footer(self):
         self.set_y(-15)
-        self.set_font("Arial", "I", 8)
+        self.set_font(self.font_family_name, "I", 8)
         self.cell(0, 10, f"Page {self.page_no()}", align="C")
 
 
@@ -78,29 +124,29 @@ def generate_pdf_from_result(result: Dict[str, Any], cfg: ReportConfig) -> str:
     pdf.add_page()
 
     # ----- Summary -----
-    pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 8, f"Student: {result['student_base']}", ln=1)
+    pdf.set_font(pdf.font_family_name, "", 12)
+    pdf.cell(0, 8, _safe_text(f"Student: {result['student_base']}", pdf.font_family_name), ln=1)
     pdf.cell(
         0,
         8,
-        f"Total Score: {result['total_score']:.2f} / {result['max_total']:.2f}",
+        _safe_text(f"Total Score: {result['total_score']:.2f} / {result['max_total']:.2f}", pdf.font_family_name),
         ln=1,
     )
-    pdf.cell(0, 8, f"Percentage: {result['percentage']:.2f}%", ln=1)
+    pdf.cell(0, 8, _safe_text(f"Percentage: {result['percentage']:.2f}%", pdf.font_family_name), ln=1)
     pdf.ln(4)
 
     # ----- Per-question detail -----
     for q in result["questions"]:
-        pdf.set_font("Arial", "B", 12)
+        pdf.set_font(pdf.font_family_name, "B", 12)
         pdf.cell(
             0,
             8,
-            f"Q{q['question_id']}: {q['score']:.2f} / {q['max_marks']:.2f}",
+            _safe_text(f"Q{q['question_id']}: {q['score']:.2f} / {q['max_marks']:.2f}", pdf.font_family_name),
             ln=1,
         )
 
         # ---- Safe similarity display ----
-        pdf.set_font("Arial", "", 11)
+        pdf.set_font(pdf.font_family_name, "", 11)
 
         txt_sim = q.get("text_similarity", None)
         diag_sim = q.get("diagram_similarity", None)
@@ -108,24 +154,24 @@ def generate_pdf_from_result(result: Dict[str, Any], cfg: ReportConfig) -> str:
 
         # Text similarity
         if isinstance(txt_sim, (int, float)):
-            pdf.cell(0, 6, f"Text similarity: {txt_sim:.3f}", ln=1)
+            pdf.cell(0, 6, _safe_text(f"Text similarity: {txt_sim:.3f}", pdf.font_family_name), ln=1)
         else:
-            pdf.cell(0, 6, "Text similarity: N/A (LLM evaluation)", ln=1)
+            pdf.cell(0, 6, _safe_text("Text similarity: N/A (LLM evaluation)", pdf.font_family_name), ln=1)
 
         # Diagram similarity
         if isinstance(diag_sim, (int, float)):
-            pdf.cell(0, 6, f"Diagram similarity: {diag_sim:.3f}", ln=1)
+            pdf.cell(0, 6, _safe_text(f"Diagram similarity: {diag_sim:.3f}", pdf.font_family_name), ln=1)
         else:
-            pdf.cell(0, 6, "Diagram similarity: N/A (LLM evaluation)", ln=1)
+            pdf.cell(0, 6, _safe_text("Diagram similarity: N/A (LLM evaluation)", pdf.font_family_name), ln=1)
 
         # Formula similarity
         if isinstance(formula_sim, (int, float)):
-            pdf.cell(0, 6, f"Formula similarity: {formula_sim:.3f}", ln=1)
+            pdf.cell(0, 6, _safe_text(f"Formula similarity: {formula_sim:.3f}", pdf.font_family_name), ln=1)
         else:
-            pdf.cell(0, 6, "Formula similarity: N/A", ln=1)
+            pdf.cell(0, 6, _safe_text("Formula similarity: N/A", pdf.font_family_name), ln=1)
 
         # Feedback
-        pdf.multi_cell(0, 6, "Feedback: " + q.get("feedback", ""))
+        pdf.multi_cell(0, 6, _safe_text("Feedback: " + q.get("feedback", ""), pdf.font_family_name))
         pdf.ln(2)
 
     pdf.output(path)

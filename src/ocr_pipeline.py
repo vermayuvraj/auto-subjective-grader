@@ -85,6 +85,8 @@ def pdf_to_images(pdf_path: str, config: OCRConfig):
         pdf_path,
         dpi=config.dpi,
         poppler_path=config.poppler_path,
+        use_pdftocairo=True,
+        thread_count=max(1, min(4, (os.cpu_count() or 1))),
     )
     print(f"[OCR] Converted to {len(images)} page image(s).")
     return images
@@ -458,7 +460,7 @@ def ocr_pdf_with_document_ai(pdf_path: str, config: OCRConfig) -> None:
     print(f"[OCR] Completed with Document AI: {pdf_path}")
 
 
-def ocr_pdf_with_google_vision(pdf_path: str, config: OCRConfig) -> None:
+def ocr_pdf_with_google_vision(pdf_path: str, config: OCRConfig, images: Optional[List[Image.Image]] = None) -> None:
     client = _build_google_vision_client()
     language_hints = config.google_vision_language_hints or config.languages or [
         "en-t-i0-handwrit",
@@ -468,8 +470,8 @@ def ocr_pdf_with_google_vision(pdf_path: str, config: OCRConfig) -> None:
     print(f"[OCR] Processing PDF with Google Vision AI: {pdf_path}")
 
     if pdf_path.lower().endswith(".pdf"):
-        images = pdf_to_images(pdf_path, config)
-        for page_no, pil_img in enumerate(images, start=1):
+        page_images = images or pdf_to_images(pdf_path, config)
+        for page_no, pil_img in enumerate(page_images, start=1):
             page_bytes = _pil_image_to_google_vision_bytes(pil_img)
             image = vision.Image(content=page_bytes)
             image_context = vision.ImageContext(language_hints=language_hints)
@@ -504,7 +506,7 @@ def ocr_pdf_with_google_vision(pdf_path: str, config: OCRConfig) -> None:
     print(f"[OCR] Completed with Google Vision AI: {pdf_path}")
 
 
-def ocr_pdf_with_azure_document_intelligence(pdf_path: str, config: OCRConfig) -> None:
+def ocr_pdf_with_azure_document_intelligence(pdf_path: str, config: OCRConfig, images: Optional[List[Image.Image]] = None) -> None:
     _require_azure_document_intelligence()
 
     if not config.azure_document_intelligence_endpoint or not config.azure_document_intelligence_key:
@@ -519,8 +521,8 @@ def ocr_pdf_with_azure_document_intelligence(pdf_path: str, config: OCRConfig) -
     print(f"[OCR] Processing PDF with Azure Document Intelligence: {pdf_path}")
 
     if pdf_path.lower().endswith(".pdf"):
-        images = pdf_to_images(pdf_path, config)
-        for page_no, pil_img in enumerate(images, start=1):
+        page_images = images or pdf_to_images(pdf_path, config)
+        for page_no, pil_img in enumerate(page_images, start=1):
             page_bytes = _pil_image_to_azure_bytes(pil_img)
             poller = client.begin_analyze_document(
                 "prebuilt-read",
@@ -545,23 +547,23 @@ def ocr_pdf_with_azure_document_intelligence(pdf_path: str, config: OCRConfig) -
     print(f"[OCR] Completed with Azure Document Intelligence: {pdf_path}")
 
 
-def ocr_pdf(pdf_path: str, config: OCRConfig, reader: Optional[Any]):
+def ocr_pdf(pdf_path: str, config: OCRConfig, reader: Optional[Any], images: Optional[List[Image.Image]] = None):
     cleanup_ocr_outputs(pdf_path, config.output_root)
 
     if config.backend == "documentai":
         ocr_pdf_with_document_ai(pdf_path, config)
         return
     if config.backend == "google_vision":
-        ocr_pdf_with_google_vision(pdf_path, config)
+        ocr_pdf_with_google_vision(pdf_path, config, images=images)
         return
     if config.backend == "azure":
-        ocr_pdf_with_azure_document_intelligence(pdf_path, config)
+        ocr_pdf_with_azure_document_intelligence(pdf_path, config, images=images)
         return
 
     print(f"\n[OCR] Processing PDF: {pdf_path}")
-    images = pdf_to_images(pdf_path, config)
+    page_images = images or pdf_to_images(pdf_path, config)
 
-    for page_no, pil_img in enumerate(images, start=1):
+    for page_no, pil_img in enumerate(page_images, start=1):
         blocks = run_easyocr_on_page(pil_img, reader)
         save_ocr_page(pdf_path, page_no, blocks, config)
 
