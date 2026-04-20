@@ -1226,7 +1226,7 @@ def render_resources_tab() -> None:
         unsafe_allow_html=True,
     )
 
-    st.dataframe(RESOURCE_ITEMS, use_container_width=True, hide_index=True)
+    st.dataframe(RESOURCE_ITEMS, width="stretch", hide_index=True)
 
     st.markdown(
         """
@@ -1272,7 +1272,7 @@ def render_research_paper_tab() -> None:
         data=paper_bytes,
         file_name=uploaded_paper.name,
         mime="application/pdf",
-        use_container_width=False,
+        width="content",
     )
     render_pdf_preview(paper_bytes)
 
@@ -1444,7 +1444,7 @@ def render_documentation_overview() -> None:
         },
         index=["PDF Upload", "OCR", "Formula", "Diagram", "Scoring", "Reports"],
     )
-    st.bar_chart(chart_df, use_container_width=True)
+    st.bar_chart(chart_df, width="stretch")
 
     for section in DOCUMENTATION_STAGE_DETAILS:
         bullets = "".join(f"<li>{item}</li>" for item in section["details"])
@@ -1461,10 +1461,10 @@ def render_documentation_overview() -> None:
         )
 
     st.markdown("### Output Artifacts")
-    st.dataframe(DOCUMENTATION_OUTPUTS, use_container_width=True, hide_index=True)
+    st.dataframe(DOCUMENTATION_OUTPUTS, width="stretch", hide_index=True)
 
     st.markdown("### Technology Stack")
-    st.dataframe(RESOURCE_ITEMS, use_container_width=True, hide_index=True)
+    st.dataframe(RESOURCE_ITEMS, width="stretch", hide_index=True)
 
 
 def build_summary_rows(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1714,7 +1714,7 @@ def render_results(
     )
 
     summary_rows = build_summary_rows(results)
-    st.dataframe(summary_rows, use_container_width=True, hide_index=True)
+    st.dataframe(summary_rows, width="stretch", hide_index=True)
 
     questionwise_rows = build_questionwise_rows(results)
     questionwise_df = pd.DataFrame(questionwise_rows)
@@ -1730,13 +1730,13 @@ def render_results(
         """,
         unsafe_allow_html=True,
     )
-    st.dataframe(questionwise_df, use_container_width=True, hide_index=True)
+    st.dataframe(questionwise_df, width="stretch", hide_index=True)
     st.download_button(
         label="Download question-wise marks table (CSV)",
         data=questionwise_df.to_csv(index=False).encode("utf-8"),
         file_name="questionwise_marks_table.csv",
         mime="text/csv",
-        use_container_width=True,
+        width="stretch",
         key="download-questionwise-table",
     )
 
@@ -1777,7 +1777,7 @@ def render_results(
                         data=pdf_bytes,
                         file_name=f"{student_name}_report.pdf",
                         mime="application/pdf",
-                        use_container_width=True,
+                        width="stretch",
                         key=f"download-{student_name}",
                     )
                 else:
@@ -1878,7 +1878,7 @@ def render_evaluate_tab() -> None:
         )
 
         st.markdown("---")
-        run_button = st.button("Run Evaluation", use_container_width=True, type="primary", key="run-eval")
+        run_button = st.button("Run Evaluation", width="stretch", type="primary", key="run-eval")
 
     workflow_placeholder = st.empty()
     progress_metrics_placeholder = st.empty()
@@ -2149,7 +2149,7 @@ def main():
             }
 
         st.markdown("---")
-        run_button = st.button("Run Evaluation", use_container_width=True, type="primary")
+        run_button = st.button("Run Evaluation", width="stretch", type="primary")
 
     if not run_button:
         render_team_section()
