@@ -20,6 +20,7 @@ _READER_CACHE_LOCK = threading.Lock()
 _EASYOCR_READER_CACHE: Dict[Tuple[Tuple[str, ...], bool], Any] = {}
 _FORMULA_READER: Any = None
 _EVALUATOR_CACHE: Dict[Tuple[str, str, str, str, str], Any] = {}
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 
 
 @dataclass
@@ -193,6 +194,26 @@ def _base_name(pdf_path: str) -> str:
     return os.path.splitext(os.path.basename(pdf_path))[0]
 
 
+def _resolve_project_path(path_value: str) -> str:
+    if not path_value:
+        return path_value
+    if os.path.isabs(path_value):
+        return path_value
+    return os.path.abspath(os.path.join(PROJECT_ROOT, path_value))
+
+
+def _normalize_config_paths(config: PipelineServiceConfig) -> None:
+    config.rubric_path = _resolve_project_path(config.rubric_path)
+    config.ocr_root = _resolve_project_path(config.ocr_root)
+    config.diagram_root = _resolve_project_path(config.diagram_root)
+    config.formula_root = _resolve_project_path(config.formula_root)
+    config.formula_crop_root = _resolve_project_path(config.formula_crop_root)
+    config.eval_sbert_root = _resolve_project_path(config.eval_sbert_root)
+    config.report_sbert_root = _resolve_project_path(config.report_sbert_root)
+    config.eval_llm_root = _resolve_project_path(config.eval_llm_root)
+    config.report_llm_root = _resolve_project_path(config.report_llm_root)
+
+
 def _build_formula_plan(
     pdf_paths: List[str],
     formula_cfg: Any,
@@ -256,9 +277,14 @@ def run_pipeline(
     import ocr_pipeline
     import report_generator
 
+    _normalize_config_paths(config)
     started_at = time.perf_counter()
     azure_settings = azure_settings or {}
     languages = config.languages or ["en"]
+
+    rubric_dir = os.path.dirname(config.rubric_path)
+    if rubric_dir:
+        os.makedirs(rubric_dir, exist_ok=True)
 
     with open(config.rubric_path, "w", encoding="utf-8") as f:
         json.dump(rubric_dict, f, ensure_ascii=False, indent=2)
@@ -296,6 +322,11 @@ def run_pipeline(
     )
 
     rubric_signature = _rubric_signature(rubric_dict)
+    doc_paths = [ideal_pdf_path, *student_pdf_paths]
+    num_students = len(student_pdf_paths)
+    max_total_steps = (len(doc_paths) * 3) + (2 * num_students)
+    tracker = ProgressTracker(max_total_steps, progress_callback)
+    tracker.emit("Input validation complete. Loading evaluation models and preparing OCR, formula, diagram, and scoring stages...")
 
     if engine == "SBERT":
         report_cfg = report_generator.ReportConfig(
@@ -326,13 +357,26 @@ def run_pipeline(
     else:
         ocr_label = "Azure Document Intelligence"
 
-    formula_reader = _get_formula_reader()
+    page_image_cache: Dict[str, List[Any]] = {}
+    page_image_lock = threading.Lock()
 
-    doc_paths = [ideal_pdf_path, *student_pdf_paths]
-    num_students = len(student_pdf_paths)
-    max_total_steps = (len(doc_paths) * 3) + (2 * num_students)
-    tracker = ProgressTracker(max_total_steps, progress_callback)
-    tracker.emit("Input validation complete. Preparing OCR, formula, diagram, and evaluation stages...")
+    def get_page_images(pdf_path: str) -> List[Any]:
+        with page_image_lock:
+            cached = page_image_cache.get(pdf_path)
+        if cached is not None:
+            return cached
+
+        rendered = ocr_pipeline.pdf_to_images(pdf_path, ocr_cfg)
+        with page_image_lock:
+            existing = page_image_cache.get(pdf_path)
+            if existing is not None:
+                return existing
+            page_image_cache[pdf_path] = rendered
+        return rendered
+
+    def release_page_images(pdf_path: str) -> None:
+        with page_image_lock:
+            page_image_cache.pop(pdf_path, None)
 
     ocr_workers = _safe_worker_count(
         config.ocr_workers,
@@ -342,7 +386,7 @@ def run_pipeline(
     tracker.emit(f"Running OCR across {len(doc_paths)} document(s) with {ocr_label}...")
 
     def ocr_task(pdf_path: str) -> str:
-        ocr_pipeline.ocr_pdf(pdf_path, ocr_cfg, reader)
+        ocr_pipeline.ocr_pdf(pdf_path, ocr_cfg, reader, images=get_page_images(pdf_path))
         return pdf_path
 
     def on_ocr_done(pdf_path: str, _: Any) -> None:
@@ -363,9 +407,10 @@ def run_pipeline(
     formula_workers = _safe_worker_count(
         config.formula_workers,
         len(formula_docs),
-        1 if config.use_gpu else 2,
+        2,
     )
     if formula_docs:
+        formula_reader = _get_formula_reader()
         tracker.emit(f"Extracting formulas for {len(formula_docs)} document(s)...")
 
         def formula_task(pdf_path: str) -> Dict[int, str]:
@@ -375,6 +420,7 @@ def run_pipeline(
                 formula_cfg,
                 formula_reader,
                 candidate_pages=detection_result.candidate_pages,
+                images=get_page_images(pdf_path),
             )
 
         def on_formula_done(pdf_path: str, _: Any) -> None:
@@ -386,9 +432,14 @@ def run_pipeline(
     tracker.emit(f"Extracting diagrams across {len(doc_paths)} document(s)...")
 
     def diagram_task(pdf_path: str) -> Dict[int, Optional[str]]:
-        return diagram_extractor.extract_diagrams_for_pdf(pdf_path, diagram_cfg)
+        return diagram_extractor.extract_diagrams_for_pdf(
+            pdf_path,
+            diagram_cfg,
+            images=get_page_images(pdf_path),
+        )
 
     def on_diagram_done(pdf_path: str, _: Any) -> None:
+        release_page_images(pdf_path)
         tracker.advance(f"Completed diagram extraction for {_base_name(pdf_path)}.")
 
     _run_stage_parallel(doc_paths, diagram_workers, diagram_task, on_diagram_done)
@@ -432,6 +483,8 @@ def run_pipeline(
         tracker.advance(f"Generated JSON and PDF report for {student_name}.")
 
     _run_stage_parallel(all_results, report_workers, report_task, on_report_done)
+    for pdf_path in doc_paths:
+        release_page_images(pdf_path)
 
     tracker.set_total_steps(max(tracker.total_steps, tracker.current_step))
     tracker.emit("All evaluations complete.")

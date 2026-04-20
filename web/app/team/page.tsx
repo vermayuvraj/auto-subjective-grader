@@ -1,5 +1,22 @@
+import type { Metadata } from "next";
 import { fetchJson } from "../../lib/api";
 import { fallbackTeam } from "../../lib/fallback-data";
+import { SITE_NAME, absoluteUrl } from "../../lib/seo";
+
+export const metadata: Metadata = {
+  title: "Team",
+  description:
+    "Meet the students and mentor building Ai Grader, the automated subjective answer sheet evaluation system at RECK.",
+  alternates: {
+    canonical: "/team",
+  },
+  openGraph: {
+    title: `Team | ${SITE_NAME}`,
+    description:
+      "Meet the people behind Ai Grader and the automated subjective answer sheet evaluation project.",
+    url: absoluteUrl("/team"),
+  },
+};
 
 type TeamMember = {
   name: string;

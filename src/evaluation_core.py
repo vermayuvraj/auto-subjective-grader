@@ -1,49 +1,14 @@
-"""
-Step 3: Core Evaluation (Text + Diagram Similarity)
-
-- Loads OCR JSON for ideal and student answer sheets
-- Loads cropped diagram images (from Step 2)
-- Loads a rubric.json with per-question weights
-- Uses Sentence-BERT to compute semantic similarity between ideal and student text
-- Uses CLIP to compute similarity between ideal and student diagrams
-- Combines them into a numeric score per question, plus simple feedback
-
-Rubric format (rubric.json):
-
-{
-  "1": {
-    "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "penalize_missing_diagram": true
-  },
-  "2": { ... },
-  ...
-}
-
-If penalize_missing_diagram is:
-  - true (default): if the student does not draw a diagram, they lose the diagram marks.
-  - false: missing diagram does NOT count as a hard penalty; marks come from text only.
-
-CLI usage:
-
-    python -m src.evaluation_core
-
-This will:
-  - Evaluate each student PDF in data/students/
-  - Against data/ideal/Ideal Answer Sheet.pdf
-  - Print a summary
-  - Save JSON to results/eval/<Student_X>_eval.json
-"""
 
 import os
 import json
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Dict, Any, Optional, List
 
 import numpy as np
 import cv2
 import torch
+from huggingface_hub import snapshot_download
 from sentence_transformers import SentenceTransformer, util
 from transformers import CLIPProcessor, CLIPModel
 
@@ -73,6 +38,19 @@ def load_rubric(rubric_path: str) -> Dict[str, Any]:
 def base_name_from_pdf(pdf_path: str) -> str:
     """Return base filename without extension."""
     return os.path.splitext(os.path.basename(pdf_path))[0]
+
+
+@lru_cache(maxsize=8)
+def resolve_model_source(repo_id: str) -> str:
+    """
+    Prefer an already-downloaded Hugging Face snapshot to avoid repeated
+    network checks during local startup. Falls back to the repo id if the
+    model is not cached yet.
+    """
+    try:
+        return snapshot_download(repo_id=repo_id, local_files_only=True)
+    except Exception:
+        return repo_id
 
 
 def load_ocr_pages(base_name: str, ocr_root: str) -> Dict[int, Dict[str, Any]]:
@@ -127,7 +105,8 @@ class TextSimilarityModel:
 
     def __init__(self, device: str = "cpu"):
         self.device = device
-        self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device=device)
+        model_source = resolve_model_source("sentence-transformers/all-MiniLM-L6-v2")
+        self.model = SentenceTransformer(model_source, device=device)
 
     def similarity(self, text_a: str, text_b: str) -> float:
         if not text_a.strip() or not text_b.strip():
@@ -147,8 +126,16 @@ class DiagramSimilarityModel:
 
     def __init__(self, device: str = "cpu"):
         self.device = device
-        self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-        self.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
+        model_source = resolve_model_source("openai/clip-vit-base-patch32")
+        local_only = os.path.isdir(model_source)
+        self.processor = CLIPProcessor.from_pretrained(
+            model_source,
+            local_files_only=local_only,
+        )
+        self.model = CLIPModel.from_pretrained(
+            model_source,
+            local_files_only=local_only,
+        ).to(device)
 
     def similarity(self, img_a: np.ndarray, img_b: np.ndarray) -> float:
         # Convert BGR (OpenCV) -> RGB

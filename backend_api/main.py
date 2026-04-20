@@ -100,7 +100,7 @@ def _run_meta_path(run_id: str) -> Path:
 
 def _write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_suffix(".tmp")
+    temp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     with temp_path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     temp_path.replace(path)
@@ -225,12 +225,77 @@ def _load_run_meta(run_id: str) -> Dict[str, Any]:
     raise HTTPException(status_code=404, detail="Run not found.")
 
 
-def _persist_job_meta(run_id: str, meta: Dict[str, Any], sync_remote: bool = False) -> None:
+def _status_rank(status: Optional[str]) -> int:
+    return {
+        "queued": 0,
+        "running": 1,
+        "completed": 2,
+        "failed": 2,
+    }.get((status or "").lower(), -1)
+
+
+def _meta_sort_key(meta: Optional[Dict[str, Any]]) -> Tuple[int, str, int, int, int, int]:
+    if not meta:
+        return (-1, "", -1, -1, -1, -1)
+    return (
+        int(meta.get("_meta_version", 0) or 0),
+        str(meta.get("updated_at") or meta.get("completed_at") or meta.get("started_at") or meta.get("created_at") or ""),
+        int(meta.get("current_step", 0) or 0),
+        int(meta.get("progress_percent", 0) or 0),
+        len(meta.get("events", []) or []),
+        _status_rank(meta.get("status")),
+    )
+
+
+def _is_meta_newer(candidate: Optional[Dict[str, Any]], baseline: Optional[Dict[str, Any]]) -> bool:
+    return _meta_sort_key(candidate) > _meta_sort_key(baseline)
+
+
+def _cache_run_meta(run_id: str, meta: Dict[str, Any]) -> Dict[str, Any]:
     with JOB_CACHE_LOCK:
         JOB_CACHE[run_id] = meta
-    _write_json_atomic(_run_meta_path(run_id), meta)
+    return meta
+
+
+def _load_run_meta_fresh(run_id: str) -> Dict[str, Any]:
+    newest_meta: Optional[Dict[str, Any]] = None
+
+    if RUN_ARTIFACT_STORE.enabled:
+        remote_meta = RUN_ARTIFACT_STORE.load_run_meta(run_id)
+        if _is_meta_newer(remote_meta, newest_meta):
+            newest_meta = remote_meta
+
+    meta_path = _run_meta_path(run_id)
+    if meta_path.exists():
+        with meta_path.open("r", encoding="utf-8") as f:
+            local_meta = json.load(f)
+        if _is_meta_newer(local_meta, newest_meta):
+            newest_meta = local_meta
+
+    with JOB_CACHE_LOCK:
+        cached_meta = JOB_CACHE.get(run_id)
+    if _is_meta_newer(cached_meta, newest_meta):
+        newest_meta = cached_meta
+
+    if newest_meta is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+
+    _write_json_atomic(meta_path, newest_meta)
+    return _cache_run_meta(run_id, newest_meta)
+
+
+def _persist_job_meta(run_id: str, meta: Dict[str, Any], sync_remote: bool = False) -> None:
+    current_meta = _load_run_meta(run_id) if run_id in JOB_CACHE else None
+    next_meta = dict(meta)
+    next_meta["_meta_version"] = max(
+        int(current_meta.get("_meta_version", 0) or 0) if current_meta else 0,
+        int(next_meta.get("_meta_version", 0) or 0),
+    ) + 1
+    next_meta["updated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    _cache_run_meta(run_id, next_meta)
+    _write_json_atomic(_run_meta_path(run_id), next_meta)
     if sync_remote or RUN_ARTIFACT_STORE.enabled:
-        RUN_ARTIFACT_STORE.save_run_meta(run_id, meta)
+        RUN_ARTIFACT_STORE.save_run_meta(run_id, next_meta)
 
 
 def _sync_remote_reports(run_id: str, report_dir_value: Optional[str]) -> None:
@@ -593,6 +658,8 @@ def _create_initial_meta(
         "reports": [],
         "results": [],
         "error": None,
+        "_meta_version": 0,
+        "updated_at": created_at,
     }
     _persist_job_meta(run_id, meta)
     return meta
@@ -710,7 +777,7 @@ def _list_run_summaries() -> List[Dict[str, Any]]:
     runs_by_id: Dict[str, Dict[str, Any]] = {}
     for meta in RUN_ARTIFACT_STORE.list_run_metas():
         run_id = meta.get("run_id")
-        if run_id:
+        if run_id and _is_meta_newer(meta, runs_by_id.get(run_id)):
             runs_by_id[run_id] = meta
 
     runs: List[Dict[str, Any]] = []
@@ -721,7 +788,7 @@ def _list_run_summaries() -> List[Dict[str, Any]]:
         except Exception:
             continue
         run_id = meta.get("run_id")
-        if run_id:
+        if run_id and _is_meta_newer(meta, runs_by_id.get(run_id)):
             runs_by_id[run_id] = meta
 
     for meta in runs_by_id.values():
@@ -815,12 +882,12 @@ def list_jobs() -> List[Dict[str, Any]]:
 
 @app.get("/api/jobs/{run_id}")
 def get_job(run_id: str) -> Dict[str, Any]:
-    return _load_run_meta(run_id)
+    return _load_run_meta_fresh(run_id)
 
 
 @app.get("/api/runs/{run_id}")
 def get_run(run_id: str) -> Dict[str, Any]:
-    return _load_run_meta(run_id)
+    return _load_run_meta_fresh(run_id)
 
 
 @app.get("/api/runs/{run_id}/reports/{report_name}")

@@ -21,27 +21,28 @@ import pipeline_service
 import report_generator
 
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 POPPLER_BIN = r"C:\poppler-24.02.0\Library\bin"
 
-DATA_IDEAL_DIR = os.path.join("data", "ideal")
-DATA_STUDENTS_DIR = os.path.join("data", "students")
+DATA_IDEAL_DIR = os.path.join(PROJECT_ROOT, "data", "ideal")
+DATA_STUDENTS_DIR = os.path.join(PROJECT_ROOT, "data", "students")
 
-RESULTS_OCR_DIR = os.path.join("results", "ocr")
-RESULTS_DIAG_DIR = os.path.join("results", "diagrams")
-RESULTS_FORMULA_DIR = os.path.join("results", "formulas")
-RESULTS_FORMULA_CROP_DIR = os.path.join("results", "formula_crops")
+RESULTS_OCR_DIR = os.path.join(PROJECT_ROOT, "results", "ocr")
+RESULTS_DIAG_DIR = os.path.join(PROJECT_ROOT, "results", "diagrams")
+RESULTS_FORMULA_DIR = os.path.join(PROJECT_ROOT, "results", "formulas")
+RESULTS_FORMULA_CROP_DIR = os.path.join(PROJECT_ROOT, "results", "formula_crops")
 
-RESULTS_EVAL_SBERT_DIR = os.path.join("results", "eval")
-RESULTS_REPORT_SBERT_DIR = os.path.join("results", "reports")
+RESULTS_EVAL_SBERT_DIR = os.path.join(PROJECT_ROOT, "results", "eval")
+RESULTS_REPORT_SBERT_DIR = os.path.join(PROJECT_ROOT, "results", "reports")
 
-RESULTS_EVAL_LLM_DIR = os.path.join("results", "eval_llm")
-RESULTS_REPORT_LLM_DIR = os.path.join("results", "reports_llm")
+RESULTS_EVAL_LLM_DIR = os.path.join(PROJECT_ROOT, "results", "eval_llm")
+RESULTS_REPORT_LLM_DIR = os.path.join(PROJECT_ROOT, "results", "reports_llm")
 
-RUBRIC_PATH = "rubric.json"
+RUBRIC_PATH = os.path.join(PROJECT_ROOT, "rubric.json")
 
 DEFAULT_AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = ""
 DEFAULT_AZURE_DOCUMENT_INTELLIGENCE_KEY = ""
-DOCUMENTATION_PATH = "README.md"
+DOCUMENTATION_PATH = os.path.join(PROJECT_ROOT, "README.md")
 
 HOME_GALLERY = [
     {
@@ -1574,10 +1575,10 @@ def run_full_pipeline(
         report_sbert_root=RESULTS_REPORT_SBERT_DIR,
         eval_llm_root=RESULTS_EVAL_LLM_DIR,
         report_llm_root=RESULTS_REPORT_LLM_DIR,
-        ocr_workers=1 if (ocr_backend == "easyocr" and local_use_gpu) else 4,
+        ocr_workers=2 if (ocr_backend == "easyocr" and local_use_gpu) else 4,
         diagram_workers=6,
-        formula_workers=1 if local_use_gpu else 2,
-        sbert_eval_workers=1,
+        formula_workers=2 if local_use_gpu else 2,
+        sbert_eval_workers=2 if local_use_gpu else 1,
         llm_eval_workers=4,
         report_workers=6,
         enable_formula_autoskip=True,
