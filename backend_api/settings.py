@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import google.auth
+from google_cloud_auth import resolve_google_cloud_project_id
 
 
 DEFAULT_ALLOWED_ORIGINS = ["*"]
@@ -86,10 +87,9 @@ class AppSettings:
 
 
 def _resolve_vertex_ai_project() -> Optional[str]:
-    for name in ("VERTEX_AI_PROJECT", "GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT", "GCP_PROJECT"):
-        raw = os.getenv(name)
-        if raw:
-            return raw.strip()
+    project_id = resolve_google_cloud_project_id()
+    if project_id:
+        return project_id
 
     if not _should_attempt_adc_project_resolution():
         return None

@@ -20,6 +20,7 @@ _READER_CACHE_LOCK = threading.Lock()
 _EASYOCR_READER_CACHE: Dict[Tuple[Tuple[str, ...], bool], Any] = {}
 _FORMULA_READER: Any = None
 _EVALUATOR_CACHE: Dict[Tuple[str, str, str, str, str], Any] = {}
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 
 
 @dataclass
@@ -193,6 +194,26 @@ def _base_name(pdf_path: str) -> str:
     return os.path.splitext(os.path.basename(pdf_path))[0]
 
 
+def _resolve_project_path(path_value: str) -> str:
+    if not path_value:
+        return path_value
+    if os.path.isabs(path_value):
+        return path_value
+    return os.path.abspath(os.path.join(PROJECT_ROOT, path_value))
+
+
+def _normalize_config_paths(config: PipelineServiceConfig) -> None:
+    config.rubric_path = _resolve_project_path(config.rubric_path)
+    config.ocr_root = _resolve_project_path(config.ocr_root)
+    config.diagram_root = _resolve_project_path(config.diagram_root)
+    config.formula_root = _resolve_project_path(config.formula_root)
+    config.formula_crop_root = _resolve_project_path(config.formula_crop_root)
+    config.eval_sbert_root = _resolve_project_path(config.eval_sbert_root)
+    config.report_sbert_root = _resolve_project_path(config.report_sbert_root)
+    config.eval_llm_root = _resolve_project_path(config.eval_llm_root)
+    config.report_llm_root = _resolve_project_path(config.report_llm_root)
+
+
 def _build_formula_plan(
     pdf_paths: List[str],
     formula_cfg: Any,
@@ -256,9 +277,14 @@ def run_pipeline(
     import ocr_pipeline
     import report_generator
 
+    _normalize_config_paths(config)
     started_at = time.perf_counter()
     azure_settings = azure_settings or {}
     languages = config.languages or ["en"]
+
+    rubric_dir = os.path.dirname(config.rubric_path)
+    if rubric_dir:
+        os.makedirs(rubric_dir, exist_ok=True)
 
     with open(config.rubric_path, "w", encoding="utf-8") as f:
         json.dump(rubric_dict, f, ensure_ascii=False, indent=2)

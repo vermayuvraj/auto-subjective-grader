@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 
 import google.auth
+from google_cloud_auth import get_google_auth_credentials, resolve_google_cloud_project_id
 
 # Hide a known runtime-version deprecation warning from google.api_core.
 # This keeps CLI output clean while the project remains on Python 3.10.
@@ -154,23 +155,19 @@ class LlmEvaluator:
 
         self.project_id = project_id
         self.location = location
+        self.credentials = get_google_auth_credentials()
         self.client = genai.Client(
             vertexai=True,
+            credentials=self.credentials,
             project=project_id,
             location=location,
             http_options=types.HttpOptions(api_version="v1"),
         )
 
     def _resolve_vertex_project_id(self) -> Optional[str]:
-        for env_name in (
-            "VERTEX_AI_PROJECT",
-            "GOOGLE_CLOUD_PROJECT",
-            "GCLOUD_PROJECT",
-            "GCP_PROJECT",
-        ):
-            value = os.environ.get(env_name)
-            if value:
-                return value.strip()
+        project_id = resolve_google_cloud_project_id()
+        if project_id:
+            return project_id
 
         if not _should_attempt_adc_project_resolution():
             return None

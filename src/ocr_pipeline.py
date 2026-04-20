@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from pdf2image import convert_from_path
 from PIL import Image
+from google_cloud_auth import get_google_auth_credentials
 
 try:
     from google.api_core.client_options import ClientOptions
@@ -133,12 +134,14 @@ def _require_google_vision() -> None:
 def _build_google_vision_client():
     _require_google_vision()
     try:
-        return vision.ImageAnnotatorClient()
-    except DefaultCredentialsError as exc:
+        credentials = get_google_auth_credentials()
+        return vision.ImageAnnotatorClient(credentials=credentials)
+    except (DefaultCredentialsError, RuntimeError) as exc:
         raise RuntimeError(
-            "Google Vision OCR requires Google Application Default Credentials. "
-            "Run `gcloud auth application-default login` locally or deploy on Google Cloud "
-            "with Vision API access enabled."
+            "Google Vision OCR requires Google Cloud credentials. "
+            "Run `gcloud auth application-default login`, or sign in with "
+            "`gcloud auth login` and select a project so the local fallback can use "
+            "your existing Cloud session."
         ) from exc
 
 
