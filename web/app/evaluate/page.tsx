@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, SVGProps, useEffect, useMemo, useState } from "react";
+import { FormEvent, SVGProps, useEffect, useMemo, useRef, useState } from "react";
 import { SectionShell } from "../../components/section-shell";
 import { BROWSER_API_BASE_URL } from "../../lib/api";
 
@@ -95,6 +95,167 @@ type WorkflowBlock = {
   detail: string;
   optional?: boolean;
 };
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+}
+
+function asNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  return asNumber(value, 0);
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizeStatus(value: unknown): RunMeta["status"] {
+  return value === "queued" || value === "running" || value === "completed" || value === "failed"
+    ? value
+    : "failed";
+}
+
+function normalizeSummaryRow(value: unknown): SummaryRow {
+  const row = asRecord(value);
+  return {
+    rank: asNumber(row.rank, 0),
+    student: asString(row.student, "Unknown"),
+    total_score: asNumber(row.total_score, 0),
+    max_score: asNumber(row.max_score, 0),
+    percentage: asNumber(row.percentage, 0),
+  };
+}
+
+function normalizeRunEvent(value: unknown): RunEvent {
+  const event = asRecord(value);
+  return {
+    timestamp: asString(event.timestamp, ""),
+    message: asString(event.message, ""),
+  };
+}
+
+function normalizeReportLink(value: unknown): ReportLink {
+  const report = asRecord(value);
+  return {
+    student: asString(report.student, "Unknown"),
+    download_url: asString(report.download_url, ""),
+  };
+}
+
+function normalizeQuestionResult(value: unknown): QuestionResult {
+  const question = asRecord(value);
+  return {
+    question_id: asString(question.question_id, String(asNumber(question.question_id, 0))),
+    score: asNumber(question.score, 0),
+    max_marks: asNumber(question.max_marks, 0),
+  };
+}
+
+function normalizeStudentResult(value: unknown): StudentResult {
+  const result = asRecord(value);
+  const questions = Array.isArray(result.questions) ? result.questions : [];
+  return {
+    student_base: asString(result.student_base, "Unknown"),
+    total_score: asNumber(result.total_score, 0),
+    max_total: asNumber(result.max_total, 0),
+    percentage: asNumber(result.percentage, 0),
+    questions: questions.map(normalizeQuestionResult),
+  };
+}
+
+function normalizeRunMeta(value: unknown): RunMeta {
+  const run = asRecord(value);
+  const events = Array.isArray(run.events) ? run.events : [];
+  const summaryRows = Array.isArray(run.summary_rows) ? run.summary_rows : [];
+  const reports = Array.isArray(run.reports) ? run.reports : [];
+  const results = Array.isArray(run.results) ? run.results : [];
+
+  return {
+    run_id: asString(run.run_id, "unknown-run"),
+    status: normalizeStatus(run.status),
+    engine: asString(run.engine, "SBERT"),
+    ocr_backend: asString(run.ocr_backend, "easyocr"),
+    student_count: asNumber(run.student_count, 0),
+    created_at: asString(run.created_at, ""),
+    started_at: asNullableString(run.started_at),
+    completed_at: asNullableString(run.completed_at),
+    current_step: asNumber(run.current_step, 0),
+    total_steps: asNumber(run.total_steps, 0),
+    progress_percent: asNumber(run.progress_percent, 0),
+    message: asString(run.message, "Waiting for pipeline updates."),
+    events: events.map(normalizeRunEvent),
+    elapsed_seconds: asNullableNumber(run.elapsed_seconds),
+    eval_dir: asNullableString(run.eval_dir),
+    report_dir: asNullableString(run.report_dir),
+    summary_rows: summaryRows.map(normalizeSummaryRow),
+    reports: reports.map(normalizeReportLink).filter((item) => item.download_url),
+    results: results.map(normalizeStudentResult),
+    error: asNullableString(run.error),
+  };
+}
+
+function normalizeRunSummary(value: unknown): RunSummary {
+  const run = asRecord(value);
+  return {
+    run_id: asString(run.run_id, "unknown-run"),
+    status: normalizeStatus(run.status),
+    engine: asString(run.engine, "SBERT"),
+    ocr_backend: asString(run.ocr_backend, "easyocr"),
+    student_count: asNumber(run.student_count, 0),
+    created_at: asString(run.created_at, ""),
+    completed_at: asNullableString(run.completed_at),
+    elapsed_seconds: asNullableNumber(run.elapsed_seconds),
+    progress_percent: asNumber(run.progress_percent, 0),
+    message: asString(run.message, ""),
+    top_student: asNullableString(run.top_student),
+    top_percentage: asNullableNumber(run.top_percentage),
+  };
+}
+
+function normalizeRuntimeConfig(value: unknown): RuntimeConfig {
+  const config = asRecord(value);
+  return {
+    azure_configured: asBoolean(config.azure_configured),
+    google_vision_supported: asBoolean(config.google_vision_supported),
+    gemini_configured: asBoolean(config.gemini_configured),
+    durable_run_storage: asBoolean(config.durable_run_storage),
+    allowed_origins: Array.isArray(config.allowed_origins)
+      ? config.allowed_origins.filter((item): item is string => typeof item === "string")
+      : [],
+    easyocr_use_gpu: typeof config.easyocr_use_gpu === "boolean" ? config.easyocr_use_gpu : undefined,
+    max_parallel_pipelines:
+      config.max_parallel_pipelines === undefined ? undefined : asNumber(config.max_parallel_pipelines, 1),
+    formula_autoskip_enabled:
+      typeof config.formula_autoskip_enabled === "boolean" ? config.formula_autoskip_enabled : undefined,
+  };
+}
 
 const WORKFLOW_BLOCKS: WorkflowBlock[] = [
   {
@@ -419,6 +580,18 @@ export default function EvaluatePage() {
     () => (currentRun?.results?.length ? buildQuestionwiseRows(currentRun.results) : []),
     [currentRun]
   );
+  const inputSignature = useMemo(
+    () =>
+      JSON.stringify({
+        ideal: idealPdf ? [idealPdf.name, idealPdf.size, idealPdf.lastModified] : null,
+        rubric: rubricJson ? [rubricJson.name, rubricJson.size, rubricJson.lastModified] : null,
+        students: studentPdfs.map((file) => [file.name, file.size, file.lastModified]),
+        engine,
+        ocrBackend,
+      }),
+    [idealPdf, rubricJson, studentPdfs, engine, ocrBackend]
+  );
+  const lastInputSignatureRef = useRef<string>(inputSignature);
 
   const lastCompletedRun = useMemo(
     () => runHistory.find((run) => run.status === "completed") ?? null,
@@ -441,6 +614,21 @@ export default function EvaluatePage() {
   }, []);
 
   useEffect(() => {
+    if (lastInputSignatureRef.current === inputSignature) {
+      return;
+    }
+
+    lastInputSignatureRef.current = inputSignature;
+    if (isSubmitting || isPolling) {
+      return;
+    }
+
+    setCurrentRun(null);
+    setError("");
+    setSubmitStatus("");
+  }, [inputSignature, isPolling, isSubmitting]);
+
+  useEffect(() => {
     async function loadHistory() {
       try {
         const [historyResponse, runtimeResponse] = await Promise.all([
@@ -452,12 +640,12 @@ export default function EvaluatePage() {
           throw new Error("Unable to load recent runs.");
         }
 
-        const data = (await readApiPayload<RunSummary[]>(historyResponse)) as RunSummary[];
-        setRunHistory(data);
+        const data = await readApiPayload<unknown>(historyResponse);
+        setRunHistory(Array.isArray(data) ? data.map(normalizeRunSummary) : []);
 
         if (runtimeResponse.ok) {
-          const runtimeData = (await readApiPayload<RuntimeConfig>(runtimeResponse)) as RuntimeConfig;
-          setRuntimeConfig(runtimeData);
+          const runtimeData = await readApiPayload<unknown>(runtimeResponse);
+          setRuntimeConfig(normalizeRuntimeConfig(runtimeData));
         }
       } catch (historyError) {
         setError(
@@ -491,12 +679,12 @@ export default function EvaluatePage() {
             throw new Error("Unable to refresh the active run.");
           }
 
-          const runData = (await readApiPayload<RunMeta>(runResponse)) as RunMeta;
-          setCurrentRun(runData);
+          const runData = await readApiPayload<unknown>(runResponse);
+          setCurrentRun(normalizeRunMeta(runData));
 
           if (jobsResponse.ok) {
-            const historyData = (await readApiPayload<RunSummary[]>(jobsResponse)) as RunSummary[];
-            setRunHistory(historyData);
+            const historyData = await readApiPayload<unknown>(jobsResponse);
+            setRunHistory(Array.isArray(historyData) ? historyData.map(normalizeRunSummary) : []);
           }
         } catch (pollError) {
           console.error("Unable to refresh live job progress.", pollError);
@@ -516,8 +704,8 @@ export default function EvaluatePage() {
       if (!response.ok) {
         throw new Error("Unable to refresh recent runs.");
       }
-      const data = (await readApiPayload<RunSummary[]>(response)) as RunSummary[];
-      setRunHistory(data);
+      const data = await readApiPayload<unknown>(response);
+      setRunHistory(Array.isArray(data) ? data.map(normalizeRunSummary) : []);
     } catch (historyError) {
       if (!options?.silent) {
         setError(
@@ -558,7 +746,7 @@ export default function EvaluatePage() {
         throw new Error("detail" in data && data.detail ? data.detail : "Unable to load the selected run.");
       }
 
-      const runData = data as RunMeta;
+      const runData = normalizeRunMeta(data);
       setHistoryRunDetails((current) => ({ ...current, [runId]: runData }));
       setHistoryLoadState((current) => ({ ...current, [runId]: "idle" }));
       return runData;
@@ -591,7 +779,7 @@ export default function EvaluatePage() {
     if (!response.ok) {
       throw new Error(getResponseDetail(data) ?? "Unable to create the upload session.");
     }
-    return (data as UploadSessionResponse).session_id;
+    return asString(asRecord(data).session_id, "");
   }
 
   async function uploadSessionFile(
@@ -634,7 +822,7 @@ export default function EvaluatePage() {
     if (!response.ok) {
       throw new Error(getResponseDetail(data) ?? "Evaluation failed.");
     }
-    return data as RunMeta;
+    return normalizeRunMeta(data);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -805,7 +993,7 @@ export default function EvaluatePage() {
           throw new Error("detail" in data && data.detail ? data.detail : "Evaluation failed.");
         }
 
-        createdRun = data as RunMeta;
+        createdRun = normalizeRunMeta(data);
       }
 
       setCurrentRun(createdRun);

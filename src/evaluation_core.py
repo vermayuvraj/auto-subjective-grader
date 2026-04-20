@@ -1,9 +1,10 @@
 
 import os
+import re
 import json
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Iterable, Tuple
 
 import numpy as np
 import cv2
@@ -38,6 +39,319 @@ def load_rubric(rubric_path: str) -> Dict[str, Any]:
 def base_name_from_pdf(pdf_path: str) -> str:
     """Return base filename without extension."""
     return os.path.splitext(os.path.basename(pdf_path))[0]
+
+
+ANSWER_NO_MARKER_PATTERN = re.compile(
+    r"^\s*(?:ans(?:wer)?[a-z]{0,4}|answ[a-z]{0,4}|answer[a-z]{0,4}|ass)(?:\s*no)?\s*[-:.)]*\s*(\d{1,2})\b\s*(.*)$",
+    re.IGNORECASE,
+)
+QUESTION_NO_MARKER_PATTERN = re.compile(
+    r"^\s*(?:q(?:uestion)?|que(?:stion)?|ques|qwestim|questim)\s*[.\s]*(?:no|n0)?\s*[-:.)]*\s*(\d{1,2})\b\s*(.*)$",
+    re.IGNORECASE,
+)
+NO_PREFIX_MARKER_PATTERN = re.compile(
+    r"^\s*(?:no|n0|mo|m0)\s*[-:.)]*\s*(\d{1,2})\b\s*(.*)$",
+    re.IGNORECASE,
+)
+LEADING_NUMERIC_MARKER_PATTERN = re.compile(
+    r"^\s*(\d{1,2})\s*[\].):,-]*\s*(.*)$",
+    re.IGNORECASE,
+)
+JOINED_NUMERIC_ANSWER_PATTERN = re.compile(
+    r"^\s*(\d{1,2})\s*[A-Za-z]{0,2}\s*ans(?:wer|ws|we|w)?\s*[-:.)]*\s*(.*)$",
+    re.IGNORECASE,
+)
+
+
+def _bbox_to_rect(bbox: List[List[float]]) -> Optional[Tuple[float, float, float, float]]:
+    if not bbox:
+        return None
+
+    xs = [float(point[0]) for point in bbox]
+    ys = [float(point[1]) for point in bbox]
+    x1 = min(xs)
+    y1 = min(ys)
+    x2 = max(xs)
+    y2 = max(ys)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return (x1, y1, x2, y2)
+
+
+def _ordered_ocr_blocks(blocks: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    enriched: List[Tuple[float, float, Dict[str, Any]]] = []
+    for block in blocks:
+        rect = _bbox_to_rect(block.get("bbox", []))
+        if rect is None:
+            continue
+        x1, y1, _, _ = rect
+        enriched.append((y1, x1, block))
+
+    enriched.sort(key=lambda item: (item[0], item[1]))
+    return [block for _, _, block in enriched]
+
+
+def _normalize_inline_text(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "")).strip()
+
+
+def _coerce_allowed_qids(known_qids: Optional[Iterable[int]]) -> Optional[set[int]]:
+    return {int(qid) for qid in known_qids} if known_qids is not None else None
+
+
+def _pick_allowed_qid(candidate: Optional[str], allowed: Optional[set[int]]) -> Optional[int]:
+    try:
+        qid = int(candidate) if candidate is not None else None
+    except (TypeError, ValueError):
+        return None
+    if qid is None:
+        return None
+    if allowed is not None and qid not in allowed:
+        return None
+    return qid
+
+
+def _looks_like_question_heading(text: str) -> bool:
+    normalized = _normalize_inline_text(text)
+    if len(normalized) < 8:
+        return False
+
+    if re.fullmatch(r"[\d\s./,:;+\-()]+", normalized):
+        return False
+
+    alpha_hits = len(re.findall(r"[A-Za-z]", normalized))
+    word_hits = len(re.findall(r"[A-Za-z]{2,}", normalized))
+    digit_hits = len(re.findall(r"\d", normalized))
+    if alpha_hits < 4 or word_hits < 2:
+        return False
+
+    if digit_hits > alpha_hits:
+        return False
+
+    return True
+
+
+def extract_question_marker(
+    text: str,
+    known_qids: Optional[Iterable[int]] = None,
+    allow_loose_numeric_markers: bool = True,
+) -> Optional[Tuple[int, str]]:
+    normalized = _normalize_inline_text(text)
+    if not normalized:
+        return None
+
+    allowed = _coerce_allowed_qids(known_qids)
+
+    strong_matchers = (
+        (QUESTION_NO_MARKER_PATTERN, "question"),
+        (ANSWER_NO_MARKER_PATTERN, "answer"),
+        (NO_PREFIX_MARKER_PATTERN, "number"),
+    )
+    for pattern, marker_type in strong_matchers:
+        match = pattern.match(normalized)
+        if not match:
+            continue
+        qid = _pick_allowed_qid(match.group(1), allowed)
+        if qid is not None:
+            return qid, marker_type
+
+    if allow_loose_numeric_markers:
+        joined_answer_match = JOINED_NUMERIC_ANSWER_PATTERN.match(normalized)
+        if joined_answer_match:
+            qid = _pick_allowed_qid(joined_answer_match.group(1), allowed)
+            if qid is not None:
+                return qid, "numeric-answer"
+
+        leading_numeric_match = LEADING_NUMERIC_MARKER_PATTERN.match(normalized)
+        if leading_numeric_match:
+            remainder = _normalize_inline_text(leading_numeric_match.group(2))
+            if _looks_like_question_heading(remainder):
+                qid = _pick_allowed_qid(leading_numeric_match.group(1), allowed)
+                if qid is not None:
+                    return qid, "numeric"
+
+    return None
+
+
+def extract_question_id(text: str, known_qids: Optional[Iterable[int]] = None) -> Optional[int]:
+    marker = extract_question_marker(text, known_qids)
+    return marker[0] if marker else None
+
+
+def _strip_question_marker_prefix(text: str) -> str:
+    normalized = _normalize_inline_text(text)
+    if not normalized:
+        return ""
+
+    anchored_patterns = (
+        QUESTION_NO_MARKER_PATTERN,
+        ANSWER_NO_MARKER_PATTERN,
+        NO_PREFIX_MARKER_PATTERN,
+        JOINED_NUMERIC_ANSWER_PATTERN,
+        LEADING_NUMERIC_MARKER_PATTERN,
+    )
+    for pattern in anchored_patterns:
+        match = pattern.match(normalized)
+        if not match:
+            continue
+        remainder = _normalize_inline_text(match.group(2) if match.lastindex and match.lastindex >= 2 else "")
+        if pattern is LEADING_NUMERIC_MARKER_PATTERN and not _looks_like_question_heading(remainder):
+            continue
+        return remainder
+
+    return normalized
+
+
+def build_question_answer_map(
+    base_name: str,
+    ocr_root: str,
+    known_qids: Iterable[int],
+    allow_loose_numeric_markers: bool = True,
+) -> Dict[int, Dict[str, Any]]:
+    """
+    Build a question-wise answer map from OCR pages.
+
+    When a student PDF contains multiple answers on a single page, OCR often
+    captures question markers such as "Que - 6" or "Question 3". We segment the
+    page into question-wise text ranges using those markers. If no markers are
+    found for a page, we fall back to the original page-number mapping.
+
+    Returns:
+      {
+        qid: {
+          "question_id": int,
+          "text": str,
+          "page_numbers": [int, ...],
+          "primary_page": int,
+          "source": "marker" | "page",
+          "shared_page": bool,
+        }
+      }
+    """
+    pages = load_ocr_pages(base_name, ocr_root)
+    allowed_qids = sorted({int(qid) for qid in known_qids})
+    answer_map: Dict[int, Dict[str, Any]] = {}
+    pages_with_marker_segments: set[int] = set()
+
+    for page_no, page_data in sorted(pages.items()):
+        ordered_blocks = _ordered_ocr_blocks(page_data.get("blocks", []) or [])
+        detected_qids: List[int] = []
+        segments: List[Tuple[int, List[str]]] = []
+        current_qid: Optional[int] = None
+        current_parts: List[str] = []
+        preamble_parts: List[str] = []
+        strong_marker_seen = False
+
+        for block in ordered_blocks:
+            block_text = _normalize_inline_text(str(block.get("text", "")))
+            if not block_text:
+                continue
+
+            marker = extract_question_marker(
+                block_text,
+                allowed_qids,
+                allow_loose_numeric_markers=allow_loose_numeric_markers,
+            )
+            if marker is not None:
+                block_qid, marker_source = marker
+                if strong_marker_seen and marker_source == "numeric":
+                    if current_qid is not None:
+                        current_parts.append(block_text)
+                    else:
+                        preamble_parts.append(block_text)
+                    continue
+                if current_qid is None and preamble_parts and page_no in allowed_qids and page_no != block_qid:
+                    preamble_text = "\n".join(
+                        part for part in preamble_parts if _normalize_inline_text(part)
+                    ).strip()
+                    if len(preamble_text) >= 20:
+                        segments.append((page_no, preamble_parts.copy()))
+                        detected_qids.append(page_no)
+                preamble_parts = []
+                if current_qid is not None:
+                    segments.append((current_qid, current_parts))
+                current_qid = block_qid
+                detected_qids.append(block_qid)
+                current_parts = []
+                remainder = _strip_question_marker_prefix(block_text)
+                if remainder:
+                    current_parts.append(remainder)
+                strong_marker_seen = strong_marker_seen or marker_source in {"question", "answer", "number"}
+                continue
+
+            if current_qid is not None:
+                current_parts.append(block_text)
+            else:
+                preamble_parts.append(block_text)
+
+        if current_qid is not None:
+            segments.append((current_qid, current_parts))
+
+        unique_qids = list(dict.fromkeys(detected_qids))
+        if segments:
+            pages_with_marker_segments.add(page_no)
+
+        for qid, parts in segments:
+            text = "\n".join(part for part in parts if _normalize_inline_text(part)).strip()
+            if not text and len(unique_qids) == 1:
+                text = _normalize_inline_text(str(page_data.get("text", "")))
+
+            entry = answer_map.setdefault(
+                qid,
+                {
+                    "question_id": qid,
+                    "text_parts": [],
+                    "page_numbers": [],
+                    "primary_page": page_no,
+                    "source": "marker",
+                    "shared_page": len(unique_qids) > 1,
+                    "marker_confidence": "strong" if strong_marker_seen else "medium",
+                },
+            )
+            if text:
+                entry["text_parts"].append(text)
+            entry["page_numbers"].append(page_no)
+            entry["shared_page"] = entry["shared_page"] or len(unique_qids) > 1
+            entry["primary_page"] = min(int(entry["primary_page"]), page_no)
+            entry["marker_confidence"] = (
+                "strong"
+                if entry.get("marker_confidence") == "strong" or strong_marker_seen
+                else "medium"
+            )
+
+    # Fallback for pages that do not expose explicit question markers.
+    for page_no, page_data in sorted(pages.items()):
+        if page_no in pages_with_marker_segments:
+            continue
+        if page_no not in allowed_qids or page_no in answer_map:
+            continue
+
+        answer_map[page_no] = {
+            "question_id": page_no,
+            "text_parts": [_normalize_inline_text(str(page_data.get("text", "")))],
+            "page_numbers": [page_no],
+            "primary_page": page_no,
+            "source": "page",
+            "shared_page": False,
+            "marker_confidence": "page",
+        }
+
+    finalized: Dict[int, Dict[str, Any]] = {}
+    for qid, entry in answer_map.items():
+        combined_text = "\n".join(
+            part for part in entry.pop("text_parts", []) if _normalize_inline_text(part)
+        ).strip()
+        finalized[qid] = {
+            "question_id": int(entry["question_id"]),
+            "text": combined_text,
+            "page_numbers": sorted({int(page_no) for page_no in entry["page_numbers"]}),
+            "primary_page": int(entry["primary_page"]),
+            "source": str(entry["source"]),
+            "shared_page": bool(entry["shared_page"]),
+            "marker_confidence": str(entry.get("marker_confidence", entry["source"])),
+        }
+
+    return finalized
 
 
 @lru_cache(maxsize=8)
@@ -418,18 +732,29 @@ class Evaluator:
         student_base = base_name_from_pdf(student_pdf_path)
 
         ideal_ocr = load_ocr_pages(ideal_base, self.config.ocr_root)
-        student_ocr = load_ocr_pages(student_base, self.config.ocr_root)
+        known_qids = sorted(int(qid) for qid in self.rubric.keys())
+        ideal_answers = build_question_answer_map(
+            ideal_base,
+            self.config.ocr_root,
+            known_qids,
+            allow_loose_numeric_markers=False,
+        )
+        student_answers = build_question_answer_map(
+            student_base,
+            self.config.ocr_root,
+            known_qids,
+        )
 
         results: List[Dict[str, Any]] = []
         total_score = 0.0
         max_total = 0.0
 
-        # assume 1 page = 1 question for now
-        for page_no, ideal_page_data in sorted(ideal_ocr.items()):
-            qid = page_no  # mapping: page → Qid
-            student_page_data = student_ocr.get(page_no)
-            if not student_page_data:
-                # no answer for this question
+        for qid in known_qids:
+            ideal_answer = ideal_answers.get(qid)
+            ideal_page_data = ideal_ocr.get(qid, {})
+            student_answer = student_answers.get(qid)
+            ideal_text = (ideal_answer or {}).get("text") or ideal_page_data.get("text", "")
+            if not student_answer or not student_answer.get("text", "").strip():
                 rub = self._get_rubric_for_question(qid)
                 max_marks = float(rub.get("max_marks", 10))
                 max_total += max_marks
@@ -441,18 +766,43 @@ class Evaluator:
                         "text_similarity": 0.0,
                         "diagram_similarity": 0.0,
                         "formula_similarity": 0.0,
-                        "feedback": "No answer detected for this question."
+                        "feedback": "No answer detected for this question.",
                     }
                 )
                 continue
 
-            ideal_text = ideal_page_data.get("text", "")
-            student_text = student_page_data.get("text", "")
+            student_text = student_answer.get("text", "")
 
-            ideal_diag_img = load_diagram_image(ideal_base, page_no, self.config.diagram_root)
-            student_diag_img = load_diagram_image(student_base, page_no, self.config.diagram_root)
-            ideal_formulas = load_formula_page(ideal_base, page_no, self.config.formula_root)
-            student_formulas = load_formula_page(student_base, page_no, self.config.formula_root)
+            ideal_asset_page = (
+                int(ideal_answer.get("primary_page"))
+                if ideal_answer and ideal_answer.get("primary_page") and not ideal_answer.get("shared_page", False)
+                else (qid if qid in ideal_ocr else None)
+            )
+            ideal_diag_img = (
+                load_diagram_image(ideal_base, ideal_asset_page, self.config.diagram_root)
+                if ideal_asset_page is not None
+                else None
+            )
+            student_asset_page = (
+                int(student_answer.get("primary_page"))
+                if student_answer.get("primary_page") and not student_answer.get("shared_page", False)
+                else None
+            )
+            student_diag_img = (
+                load_diagram_image(student_base, student_asset_page, self.config.diagram_root)
+                if student_asset_page is not None
+                else None
+            )
+            ideal_formulas = (
+                load_formula_page(ideal_base, ideal_asset_page, self.config.formula_root)
+                if ideal_asset_page is not None
+                else []
+            )
+            student_formulas = (
+                load_formula_page(student_base, student_asset_page, self.config.formula_root)
+                if student_asset_page is not None
+                else []
+            )
 
             qres = self.evaluate_question(
                 qid,

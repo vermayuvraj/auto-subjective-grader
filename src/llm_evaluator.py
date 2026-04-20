@@ -4,6 +4,8 @@ import warnings
 import mimetypes
 import re
 import time
+import threading
+import cv2
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 import os
@@ -26,11 +28,13 @@ warnings.filterwarnings(
 from google import genai
 from google.genai import types
 
+import evaluation_core
 from evaluation_core import (
     load_ocr_pages,
     load_diagram_image,
     base_name_from_pdf,
     load_rubric,
+    build_question_answer_map,
 )
 from formula_evaluator import load_formula_page, score_formula_sets
 
@@ -149,20 +153,118 @@ class LlmEvaluator:
             or config.default_location
         )
 
-        os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "true")
-        os.environ.setdefault("GOOGLE_CLOUD_PROJECT", project_id)
-        os.environ.setdefault("GOOGLE_CLOUD_LOCATION", location)
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
+        os.environ["GOOGLE_CLOUD_LOCATION"] = location
 
         self.project_id = project_id
         self.location = location
         self.credentials = get_google_auth_credentials()
-        self.client = genai.Client(
+        self._thread_local = threading.local()
+        self._fallback_lock = threading.Lock()
+        self._fallback_evaluator = None
+        self.client = self._build_vertex_client(self.credentials)
+        self._thread_local.client = self.client
+        self._thread_local.credentials = self.credentials
+
+    def _build_vertex_client(self, credentials=None):
+        return genai.Client(
             vertexai=True,
-            credentials=self.credentials,
-            project=project_id,
-            location=location,
+            credentials=credentials or self.credentials,
+            project=self.project_id,
+            location=self.location,
             http_options=types.HttpOptions(api_version="v1"),
         )
+
+    def _get_thread_client(self):
+        client = getattr(self._thread_local, "client", None)
+        if client is not None:
+            return client
+
+        credentials = get_google_auth_credentials()
+        client = self._build_vertex_client(credentials)
+        self._thread_local.client = client
+        self._thread_local.credentials = credentials
+        return client
+
+    def _refresh_vertex_client(self) -> None:
+        credentials = get_google_auth_credentials()
+        client = self._build_vertex_client(credentials)
+        self.credentials = credentials
+        self.client = client
+        self._thread_local.credentials = credentials
+        self._thread_local.client = client
+
+    def _get_fallback_evaluator(self):
+        if self._fallback_evaluator is not None:
+            return self._fallback_evaluator
+
+        with self._fallback_lock:
+            if self._fallback_evaluator is None:
+                fallback_cfg = evaluation_core.EvalConfig(
+                    ocr_root=self.config.ocr_root,
+                    diagram_root=self.config.diagram_root,
+                    formula_root=self.config.formula_root,
+                    rubric_path=self.config.rubric_path,
+                )
+                self._fallback_evaluator = evaluation_core.Evaluator(fallback_cfg)
+        return self._fallback_evaluator
+
+    def _summarize_llm_error(self, error: Exception) -> str:
+        message = str(error).strip()
+        if not message:
+            return "Gemini evaluation temporarily failed."
+        compact = re.sub(r"\s+", " ", message)
+        if len(compact) > 220:
+            compact = compact[:217].rstrip() + "..."
+        return compact
+
+    def _fallback_question_result(
+        self,
+        qid: int,
+        ideal_text: str,
+        student_text: str,
+        ideal_diag_path: Optional[str],
+        student_diag_path: Optional[str],
+        ideal_formulas: List[Dict[str, Any]],
+        student_formulas: List[Dict[str, Any]],
+        llm_error: Exception,
+    ) -> Dict[str, Any]:
+        fallback_evaluator = self._get_fallback_evaluator()
+        ideal_diagram = None
+        student_diagram = None
+        if ideal_diag_path and os.path.exists(ideal_diag_path):
+            ideal_diagram = cv2.imread(ideal_diag_path)
+        if student_diag_path and os.path.exists(student_diag_path):
+            student_diagram = cv2.imread(student_diag_path)
+
+        fallback_result = fallback_evaluator.evaluate_question(
+            qid=qid,
+            ideal_text=ideal_text,
+            student_text=student_text,
+            ideal_diagram=ideal_diagram,
+            student_diagram=student_diagram,
+            ideal_formulas=ideal_formulas,
+            student_formulas=student_formulas,
+        )
+
+        fallback_feedback = fallback_result.feedback.strip()
+        error_note = self._summarize_llm_error(llm_error)
+        combined_feedback = (
+            f"{fallback_feedback} Gemini fallback used because the Vertex AI request failed: {error_note}"
+            if fallback_feedback
+            else f"Gemini fallback used because the Vertex AI request failed: {error_note}"
+        )
+
+        return {
+            "question_id": qid,
+            "score": float(fallback_result.score),
+            "max_marks": float(fallback_result.max_marks),
+            "text_similarity": fallback_result.text_similarity,
+            "diagram_similarity": fallback_result.diagram_similarity,
+            "formula_similarity": fallback_result.formula_similarity,
+            "feedback": combined_feedback,
+        }
 
     def _resolve_vertex_project_id(self) -> Optional[str]:
         project_id = resolve_google_cloud_project_id()
@@ -326,7 +428,8 @@ Do not include any extra keys. Do not include explanations outside the JSON.
         if student_part is not None:
             parts.append(student_part)
 
-        response = self.client.models.generate_content(
+        client = self._get_thread_client()
+        response = client.models.generate_content(
             model=self.config.model_name,
             contents=parts,
             config=types.GenerateContentConfig(
@@ -375,6 +478,19 @@ Do not include any extra keys. Do not include explanations outside the JSON.
             )
         )
 
+    def _is_auth_vertex_error(self, error: Exception) -> bool:
+        message = str(error).upper()
+        return any(
+            token in message
+            for token in (
+                "401",
+                "UNAUTHENTICATED",
+                "ACCESS_TOKEN_TYPE_UNSUPPORTED",
+                "INVALID AUTHENTICATION CREDENTIALS",
+                "EXPECTED OAUTH 2 ACCESS TOKEN",
+            )
+        )
+
     def _extract_retry_delay_seconds(self, error: Exception, attempt: int) -> float:
         message = str(error)
         patterns = (
@@ -400,6 +516,10 @@ Do not include any extra keys. Do not include explanations outside the JSON.
                 return self._call_vertex_ai(prompt, ideal_diagram_path, student_diagram_path)
             except Exception as error:  # pragma: no cover - retry path depends on external API behavior
                 last_error = error
+                if self._is_auth_vertex_error(error) and attempt < 3:
+                    self._refresh_vertex_client()
+                    time.sleep(min(2.0 * attempt, 5.0))
+                    continue
                 if not self._is_retryable_vertex_error(error) or attempt == 4:
                     raise
                 time.sleep(self._extract_retry_delay_seconds(error, attempt))
@@ -439,14 +559,26 @@ Do not include any extra keys. Do not include explanations outside the JSON.
         student_base = base_name_from_pdf(student_pdf_path)
 
         ideal_ocr = load_ocr_pages(ideal_base, self.config.ocr_root)
-        student_ocr = load_ocr_pages(student_base, self.config.ocr_root)
+        known_qids = sorted(int(qid) for qid in self.rubric.keys())
+        ideal_answers = build_question_answer_map(
+            ideal_base,
+            self.config.ocr_root,
+            known_qids,
+            allow_loose_numeric_markers=False,
+        )
+        student_answers = build_question_answer_map(
+            student_base,
+            self.config.ocr_root,
+            known_qids,
+        )
 
         results: List[Dict[str, Any]] = []
         total_score = 0.0
         max_total = 0.0
 
-        for page_no, ideal_page_data in sorted(ideal_ocr.items()):
-            qid = page_no
+        for qid in known_qids:
+            ideal_answer = ideal_answers.get(qid)
+            ideal_page_data = ideal_ocr.get(qid, {})
             rubric_for_q = self._get_rubric_for_question(qid)
             comp_max = self._compute_component_max(rubric_for_q)
             max_marks = comp_max["max_marks"]
@@ -456,8 +588,8 @@ Do not include any extra keys. Do not include explanations outside the JSON.
 
             max_total += max_marks
 
-            student_page_data = student_ocr.get(page_no)
-            if not student_page_data:
+            student_answer = student_answers.get(qid)
+            if not student_answer or not student_answer.get("text", "").strip():
                 # No answer for this question
                 results.append(
                     {
@@ -472,22 +604,44 @@ Do not include any extra keys. Do not include explanations outside the JSON.
                 )
                 continue
 
-            ideal_text = ideal_page_data.get("text", "")
-            student_text = student_page_data.get("text", "")
-            ideal_formulas = load_formula_page(ideal_base, page_no, self.config.formula_root)
-            student_formulas = load_formula_page(student_base, page_no, self.config.formula_root)
+            ideal_text = (ideal_answer or {}).get("text") or ideal_page_data.get("text", "")
+            student_text = student_answer.get("text", "")
+            ideal_asset_page = (
+                int(ideal_answer.get("primary_page"))
+                if ideal_answer and ideal_answer.get("primary_page") and not ideal_answer.get("shared_page", False)
+                else (qid if qid in ideal_ocr else None)
+            )
+            ideal_formulas = (
+                load_formula_page(ideal_base, ideal_asset_page, self.config.formula_root)
+                if ideal_asset_page is not None
+                else []
+            )
+            student_asset_page = (
+                int(student_answer.get("primary_page"))
+                if student_answer.get("primary_page") and not student_answer.get("shared_page", False)
+                else None
+            )
+            student_formulas = (
+                load_formula_page(student_base, student_asset_page, self.config.formula_root)
+                if student_asset_page is not None
+                else []
+            )
 
             # Diagram paths (if exist)
             ideal_diag_path = os.path.join(
                 self.config.diagram_root,
-                f"{ideal_base}_page{page_no}_diagram.png",
+                f"{ideal_base}_page{ideal_asset_page}_diagram.png",
+            ) if ideal_asset_page is not None else None
+            student_diag_path = (
+                os.path.join(
+                    self.config.diagram_root,
+                    f"{student_base}_page{student_asset_page}_diagram.png",
+                )
+                if student_asset_page is not None
+                else None
             )
-            student_diag_path = os.path.join(
-                self.config.diagram_root,
-                f"{student_base}_page{page_no}_diagram.png",
-            )
-            has_ideal_diagram = os.path.exists(ideal_diag_path)
-            has_student_diagram = os.path.exists(student_diag_path)
+            has_ideal_diagram = bool(ideal_diag_path and os.path.exists(ideal_diag_path))
+            has_student_diagram = bool(student_diag_path and os.path.exists(student_diag_path))
 
             prompt = self._build_llm_prompt(
                 qid=qid,
@@ -524,11 +678,19 @@ Do not include any extra keys. Do not include explanations outside the JSON.
                 score = max(0.0, min(max_marks, score))
 
             except Exception as e:
-                # On any LLM failure, fall back to zero score with error feedback
-                text_score = 0.0
-                diagram_score = 0.0
-                score = 0.0
-                feedback = f"Automatic LLM grading failed: {e}"
+                fallback_entry = self._fallback_question_result(
+                    qid=qid,
+                    ideal_text=ideal_text,
+                    student_text=student_text,
+                    ideal_diag_path=ideal_diag_path,
+                    student_diag_path=student_diag_path,
+                    ideal_formulas=ideal_formulas,
+                    student_formulas=student_formulas,
+                    llm_error=e,
+                )
+                total_score += float(fallback_entry["score"])
+                results.append(fallback_entry)
+                continue
 
             formula_similarity = None
             formula_feedback = ""

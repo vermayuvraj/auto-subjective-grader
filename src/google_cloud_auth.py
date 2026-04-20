@@ -10,12 +10,16 @@ from typing import Optional
 try:
     import google.auth
     from google.auth import credentials as google_auth_credentials
+    from google.auth import load_credentials_from_file
     from google.auth.exceptions import DefaultCredentialsError, RefreshError
+    from google.auth.transport.requests import Request
 except ImportError:  # optional until Google-backed features are used
     google = None  # type: ignore[assignment]
     google_auth_credentials = None  # type: ignore[assignment]
+    load_credentials_from_file = None  # type: ignore[assignment]
     DefaultCredentialsError = Exception  # type: ignore[assignment]
     RefreshError = Exception  # type: ignore[assignment]
+    Request = None  # type: ignore[assignment]
 
 
 _GCLOUD_LOCK = threading.Lock()
@@ -63,13 +67,59 @@ def _default_adc_path() -> Optional[str]:
     return os.path.join(os.path.expanduser("~"), ".config", "gcloud", "application_default_credentials.json")
 
 
-def has_adc_credentials() -> bool:
+def _legacy_adc_path_for_account(account: str) -> Optional[str]:
+    account = (account or "").strip()
+    if not account:
+        return None
+
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA")
+        if not appdata:
+            return None
+        path = os.path.join(appdata, "gcloud", "legacy_credentials", account, "adc.json")
+    else:
+        path = os.path.join(
+            os.path.expanduser("~"),
+            ".config",
+            "gcloud",
+            "legacy_credentials",
+            account,
+            "adc.json",
+        )
+
+    return path if os.path.exists(path) else None
+
+
+def _active_gcloud_account() -> Optional[str]:
+    for env_name in ("GOOGLE_CLOUD_ACCOUNT", "CLOUDSDK_CORE_ACCOUNT"):
+        value = os.environ.get(env_name)
+        if value and value.strip():
+            return value.strip()
+
+    account = _run_gcloud("config", "get-value", "account")
+    if not account or account == "(unset)":
+        return None
+    return account.strip()
+
+
+def find_local_google_credentials_path() -> Optional[str]:
     explicit_credentials = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     if explicit_credentials and os.path.exists(explicit_credentials):
-        return True
+        return explicit_credentials
 
     adc_path = _default_adc_path()
-    return bool(adc_path and os.path.exists(adc_path))
+    if adc_path and os.path.exists(adc_path):
+        return adc_path
+
+    active_account = _active_gcloud_account()
+    if active_account:
+        return _legacy_adc_path_for_account(active_account)
+
+    return None
+
+
+def has_adc_credentials() -> bool:
+    return bool(find_local_google_credentials_path())
 
 
 def running_on_google_cloud() -> bool:
@@ -123,7 +173,9 @@ def get_gcloud_access_token(force_refresh: bool = False) -> Optional[str]:
         ):
             return _GCLOUD_ACCESS_TOKEN
 
-    token = _run_gcloud("auth", "print-access-token")
+    token = _run_gcloud("auth", "application-default", "print-access-token")
+    if not token:
+        token = _run_gcloud("auth", "print-access-token")
     if not token:
         return None
 
@@ -162,16 +214,44 @@ def get_google_auth_credentials():
             "google-auth is not installed. Install Google client libraries before using Vertex AI or Google Vision."
         )
 
-    if has_adc_credentials() or running_on_google_cloud():
+    project_id = resolve_google_cloud_project_id()
+    credentials_path = find_local_google_credentials_path()
+
+    if credentials_path and not running_on_google_cloud():
         try:
-            credentials, _ = google.auth.default(scopes=[_CLOUD_PLATFORM_SCOPE])
+            os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", credentials_path)
+            credentials, _ = load_credentials_from_file(  # type: ignore[misc]
+                credentials_path,
+                scopes=[_CLOUD_PLATFORM_SCOPE],
+            )
+            if (
+                project_id
+                and getattr(credentials, "quota_project_id", None) is None
+                and hasattr(credentials, "with_quota_project")
+            ):
+                credentials = credentials.with_quota_project(project_id)
+            if Request is not None and hasattr(credentials, "refresh") and not getattr(credentials, "token", None):
+                credentials.refresh(Request())
             return credentials
         except DefaultCredentialsError:
             pass
         except Exception:
             pass
 
-    project_id = resolve_google_cloud_project_id()
+    if has_adc_credentials() or running_on_google_cloud():
+        try:
+            credentials, _ = google.auth.default(
+                scopes=[_CLOUD_PLATFORM_SCOPE],
+                quota_project_id=project_id,
+            )
+            if Request is not None and hasattr(credentials, "refresh") and not getattr(credentials, "token", None):
+                credentials.refresh(Request())
+            return credentials
+        except DefaultCredentialsError:
+            pass
+        except Exception:
+            pass
+
     token = get_gcloud_access_token()
     if token:
         credentials = GcloudAccessTokenCredentials(quota_project_id=project_id)
@@ -182,5 +262,7 @@ def get_google_auth_credentials():
     raise RuntimeError(
         "Google Cloud credentials are not available. Either run "
         "`gcloud auth application-default login`, or sign in with `gcloud auth login` "
-        "and select a project so the local fallback can use your existing Cloud session."
+        "and select a project so the local fallback can use your existing Cloud session. "
+        "If you already authenticated with gcloud, make sure the active account still has a "
+        "legacy ADC file under the gcloud profile."
     )

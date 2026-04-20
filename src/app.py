@@ -19,6 +19,7 @@ import llm_evaluator
 import ocr_pipeline
 import pipeline_service
 import report_generator
+from google_cloud_auth import find_local_google_credentials_path, resolve_google_cloud_project_id
 
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -1355,6 +1356,8 @@ def build_workflow_html(
     steps_per_minute = (current_step / max(elapsed_seconds, 0.001)) * 60 if current_step else 0.0
     stage_order = [block["key"] for block in WORKFLOW_BLOCKS]
     active_index = stage_order.index(active_stage) if active_stage in stage_order else 0
+    normalized_message = (current_message or "").lower()
+    is_complete = "complete" in normalized_message and "fail" not in normalized_message
     formula_not_needed = any(
         "formula parsing not needed" in message.lower() or "no formula cues" in message.lower()
         for message in (history_messages or [current_message])
@@ -1366,6 +1369,9 @@ def build_workflow_html(
         if key == "formula" and formula_not_needed:
             state_class = "skipped"
             state_label = "Not Needed"
+        elif is_complete:
+            state_class = "done"
+            state_label = "Done"
         elif index < active_index:
             state_class = "done"
             state_label = "Done"
@@ -1504,6 +1510,30 @@ def build_questionwise_rows(results: List[Dict[str, Any]]) -> List[Dict[str, Any
     return table_rows
 
 
+def build_run_signature(
+    ideal_pdf: Optional[Any],
+    rubric_file: Optional[Any],
+    student_pdfs: Optional[List[Any]],
+    engine_choice: str,
+    ocr_mode: str,
+) -> Dict[str, Any]:
+    def file_signature(uploaded: Optional[Any]) -> Optional[tuple]:
+        if uploaded is None:
+            return None
+        return (
+            getattr(uploaded, "name", None),
+            getattr(uploaded, "size", None),
+        )
+
+    return {
+        "ideal_pdf": file_signature(ideal_pdf),
+        "rubric_file": file_signature(rubric_file),
+        "student_pdfs": tuple(file_signature(uploaded) for uploaded in (student_pdfs or [])),
+        "engine_choice": engine_choice,
+        "ocr_mode": ocr_mode,
+    }
+
+
 def get_local_runtime_status(ocr_backend: str) -> Dict[str, str]:
     try:
         import torch
@@ -1517,12 +1547,41 @@ def get_local_runtime_status(ocr_backend: str) -> Dict[str, str]:
 
     cuda_available = bool(torch.cuda.is_available())
     device_name = torch.cuda.get_device_name(0) if cuda_available else "CPU only"
-    easyocr_gpu = "Enabled" if ocr_backend == "easyocr" and cuda_available else "Disabled"
+    if ocr_backend == "easyocr":
+        easyocr_gpu = "Enabled" if cuda_available else "Disabled"
+    elif ocr_backend == "google_vision":
+        easyocr_gpu = "N/A (Google Vision mode)"
+    else:
+        easyocr_gpu = "N/A (Azure OCR mode)"
     return {
         "cuda_available": "Yes" if cuda_available else "No",
         "device_name": device_name,
         "easyocr_gpu": easyocr_gpu,
         "torch_version": getattr(torch, "__version__", "Unknown"),
+    }
+
+
+def prepare_google_cloud_runtime() -> Dict[str, Optional[str]]:
+    project_id = resolve_google_cloud_project_id()
+    credentials_path = find_local_google_credentials_path()
+
+    if project_id:
+        for env_name in ("GOOGLE_CLOUD_PROJECT", "VERTEX_AI_PROJECT", "GCLOUD_PROJECT", "GCP_PROJECT"):
+            if not os.environ.get(env_name, "").strip():
+                os.environ[env_name] = project_id
+
+    if credentials_path and os.path.exists(credentials_path):
+        current_credentials = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+        if not current_credentials or not os.path.exists(current_credentials):
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
+
+    if not os.environ.get("GOOGLE_CLOUD_LOCATION", "").strip():
+        os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
+    os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+
+    return {
+        "project_id": project_id,
+        "credentials_path": credentials_path,
     }
 
 
@@ -1840,6 +1899,18 @@ def render_evaluate_tab() -> None:
         unsafe_allow_html=True,
     )
 
+    current_signature = build_run_signature(
+        ideal_pdf=ideal_pdf,
+        rubric_file=rubric_file,
+        student_pdfs=student_pdfs,
+        engine_choice=engine_choice,
+        ocr_mode=ocr_mode,
+    )
+    previous_signature = st.session_state.get("last_run_signature")
+    if previous_signature is not None and previous_signature != current_signature:
+        st.session_state.pop("last_run", None)
+    st.session_state["last_run_signature"] = current_signature
+
     if run_button:
         if ideal_pdf is None:
             st.error("Please upload the ideal answer sheet PDF.")
@@ -1850,6 +1921,8 @@ def render_evaluate_tab() -> None:
         if rubric_file is None:
             st.error("Please upload a rubric.json file.")
             return
+
+        st.session_state.pop("last_run", None)
 
         try:
             rubric_dict = json.load(rubric_file)
@@ -1889,9 +1962,22 @@ def render_evaluate_tab() -> None:
         ideal_pdf_path = save_uploaded_file(ideal_pdf, DATA_IDEAL_DIR)
         student_pdf_paths = [save_uploaded_file(f, DATA_STUDENTS_DIR) for f in student_pdfs]
         workflow_history_messages = []
+        workflow_state = {"current_step": 0, "total_steps": 1, "elapsed_seconds": 0.0}
+
+        if ocr_backend == "google_vision" or engine_flag == "LLM":
+            cloud_runtime = prepare_google_cloud_runtime()
+            if engine_flag == "LLM" and not cloud_runtime.get("project_id"):
+                st.error(
+                    "Google Cloud project configuration is missing for Gemini Vertex AI. "
+                    "Set a default project in gcloud before running the local LLM path."
+                )
+                return
 
         def progress_callback(current_step: int, total_steps: int, message: str, elapsed_seconds: float) -> None:
             workflow_history_messages.append(message)
+            workflow_state["current_step"] = current_step
+            workflow_state["total_steps"] = total_steps
+            workflow_state["elapsed_seconds"] = elapsed_seconds
             display_step = visible_workflow_step(current_step, total_steps, message)
             workflow_placeholder.markdown(
                 build_workflow_html(
@@ -1924,17 +2010,19 @@ def render_evaluate_tab() -> None:
                 progress_callback=progress_callback,
             )
         except Exception as e:
+            st.session_state.pop("last_run", None)
             st.error(f"Pipeline failed: {e}")
             return
 
+        final_total_steps = max(int(workflow_state["total_steps"]), 1)
         workflow_placeholder.markdown(
             build_workflow_html(
                 engine=engine_flag,
-                current_message="All evaluations complete.",
-                current_step=1,
-                total_steps=1,
+                current_message="Evaluation completed successfully.",
+                current_step=final_total_steps,
+                total_steps=final_total_steps,
                 elapsed_seconds=elapsed_seconds,
-                history_messages=workflow_history_messages + ["All evaluations complete."],
+                history_messages=workflow_history_messages + ["Evaluation completed successfully."],
             ),
             unsafe_allow_html=True,
         )
@@ -1955,6 +2043,7 @@ def render_evaluate_tab() -> None:
             "report_dir_used": report_dir_used,
             "elapsed_seconds": elapsed_seconds,
         }
+        st.session_state["last_run_signature"] = current_signature
 
     last_run = st.session_state.get("last_run")
     if last_run:
