@@ -63,6 +63,130 @@ JOINED_NUMERIC_ANSWER_PATTERN = re.compile(
 )
 
 
+DEFAULT_QUESTION_KEYWORDS: Dict[int, List[str]] = {
+    1: [
+        "operational amplifier",
+        "op amp",
+        "inverting amplifier",
+        "virtual ground",
+        "voltage gain",
+        "feedback resistor",
+        "rin",
+        "rf",
+    ],
+    2: [
+        "multiplexer",
+        "multipuxer",
+        "raculcipuxer",
+        "demultiplexer",
+        "demultiplex",
+        "mux",
+        "muk",
+        "demux",
+        "select line",
+        "many to one",
+        "one to many",
+    ],
+    3: [
+        "mesh",
+        "kvl",
+        "loop current",
+        "i1",
+        "i2",
+        "50v",
+        "current equation",
+    ],
+    4: [
+        "8051",
+        "microprocessor",
+        "microcontroller",
+        "pin diagram",
+        "port",
+        "vcc",
+        "gnd",
+        "rst",
+        "xtal",
+        "ale",
+        "psen",
+    ],
+    5: [
+        "full adder",
+        "full add",
+        "logic deagram",
+        "sum",
+        "carry",
+        "cin",
+        "cout",
+        "truth table",
+        "logic diagram",
+    ],
+    6: [
+        "k map",
+        "k-map",
+        "kmap",
+        "boolean",
+        "minterm",
+        "simplify",
+        "abcd",
+    ],
+    7: [
+        "full wave rectifier",
+        "rectifier",
+        "diode",
+        "transformer",
+        "waveform",
+        "pulsating",
+        "half cycle",
+    ],
+    8: [
+        "cmos",
+        "pmos",
+        "nmos",
+        "pull up",
+        "pull down",
+        "mos",
+        "de",
+    ],
+    9: [
+        "am modulation",
+        "amplitude modulation",
+        "carrier",
+        "message signal",
+        "modulation index",
+        "modulated signal",
+    ],
+    10: [
+        "flip flop",
+        "flip-flop",
+        "sr",
+        "jk",
+        "latch",
+        "clock",
+        "truth table",
+        "application",
+    ],
+}
+
+
+def _normalize_keyword_text(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+
+def _keyword_hit_score(text: str, keywords: Iterable[str]) -> float:
+    normalized = f" {_normalize_keyword_text(text)} "
+    score = 0.0
+    for keyword in keywords:
+        kw = _normalize_keyword_text(str(keyword))
+        if not kw:
+            continue
+        if " " in kw:
+            if f" {kw} " in normalized:
+                score += 3.0 + min(len(kw.split()), 4)
+        else:
+            score += len(re.findall(rf"\b{re.escape(kw)}\b", normalized))
+    return score
+
+
 def _bbox_to_rect(bbox: List[List[float]]) -> Optional[Tuple[float, float, float, float]]:
     if not bbox:
         return None
@@ -103,10 +227,18 @@ def _pick_allowed_qid(candidate: Optional[str], allowed: Optional[set[int]]) -> 
     try:
         qid = int(candidate) if candidate is not None else None
     except (TypeError, ValueError):
-        return None
+        if candidate == "&":
+            qid = 8
+        else:
+            return None
     if qid is None:
         return None
     if allowed is not None and qid not in allowed:
+        candidate_text = str(candidate or "")
+        if len(candidate_text) > 1 and candidate_text[-1].isdigit():
+            trailing_qid = int(candidate_text[-1])
+            if trailing_qid in allowed:
+                return trailing_qid
         return None
     return qid
 
@@ -136,11 +268,56 @@ def extract_question_marker(
     known_qids: Optional[Iterable[int]] = None,
     allow_loose_numeric_markers: bool = True,
 ) -> Optional[Tuple[int, str]]:
-    normalized = _normalize_inline_text(text)
+    circled_digits = str.maketrans(
+        {
+            "①": "1",
+            "②": "2",
+            "③": "3",
+            "④": "4",
+            "⑤": "5",
+            "⑥": "6",
+            "⑦": "7",
+            "⑧": "8",
+            "⑨": "9",
+            "⑩": "10",
+        }
+    )
+    normalized = _normalize_inline_text(text).translate(circled_digits)
+    normalized = normalized.strip(" []{}()")
     if not normalized:
         return None
 
     allowed = _coerce_allowed_qids(known_qids)
+
+    ocr_answer_match = re.match(
+        r"^\s*(?:a(?:ns|nw|ul|ue|us|uy|ny|uln|ry)|answ?s?|answs|answer)\s*[-:.)\]]*\s*(\d{1,2}|&)(?:\b|\s|$)\s*(.*)$",
+        normalized,
+        re.IGNORECASE,
+    )
+    if ocr_answer_match:
+        qid = _pick_allowed_qid(ocr_answer_match.group(1), allowed)
+        if qid is not None:
+            return qid, "answer-ocr"
+
+    compact_answer_match = re.match(
+        r"^\s*a\s*(\d{1,2}|&)(?:\b|\s|$)\s*[-:.)\]]*\s*(.*)$",
+        normalized,
+        re.IGNORECASE,
+    )
+    if compact_answer_match:
+        qid = _pick_allowed_qid(compact_answer_match.group(1), allowed)
+        if qid is not None:
+            return qid, "answer-compact"
+
+    numeric_answer_match = re.match(
+        r"^\s*(\d{1,2}|&)\s*[\].):,-]*\s*[A-Za-z]{0,2}\s*ans(?:wer|ws|we|w)?\s*[-:.)]*\s*(.*)$",
+        normalized,
+        re.IGNORECASE,
+    )
+    if numeric_answer_match:
+        qid = _pick_allowed_qid(numeric_answer_match.group(1), allowed)
+        if qid is not None:
+            return qid, "numeric-answer"
 
     strong_matchers = (
         (QUESTION_NO_MARKER_PATTERN, "question"),
@@ -207,6 +384,8 @@ def build_question_answer_map(
     ocr_root: str,
     known_qids: Iterable[int],
     allow_loose_numeric_markers: bool = True,
+    question_keywords: Optional[Dict[Any, Any]] = None,
+    continue_unmarked_pages: bool = False,
 ) -> Dict[int, Dict[str, Any]]:
     """
     Build a question-wise answer map from OCR pages.
@@ -230,8 +409,14 @@ def build_question_answer_map(
     """
     pages = load_ocr_pages(base_name, ocr_root)
     allowed_qids = sorted({int(qid) for qid in known_qids})
+    keywords = (
+        _coerce_question_keywords(question_keywords, allowed_qids)
+        if question_keywords is not None
+        else {}
+    )
     answer_map: Dict[int, Dict[str, Any]] = {}
     pages_with_marker_segments: set[int] = set()
+    page_last_qid: Dict[int, int] = {}
 
     for page_no, page_data in sorted(pages.items()):
         ordered_blocks = _ordered_ocr_blocks(page_data.get("blocks", []) or [])
@@ -296,6 +481,19 @@ def build_question_answer_map(
             if not text and len(unique_qids) == 1:
                 text = _normalize_inline_text(str(page_data.get("text", "")))
 
+            marker_confidence = "strong" if strong_marker_seen else "medium"
+            if keywords and text:
+                corrected_qid, source, _ = _classify_segment_question(
+                    qid,
+                    text,
+                    allowed_qids,
+                    keywords,
+                )
+                if corrected_qid is not None:
+                    qid = corrected_qid
+                    if source != "marker":
+                        marker_confidence = source
+
             entry = answer_map.setdefault(
                 qid,
                 {
@@ -305,7 +503,7 @@ def build_question_answer_map(
                     "primary_page": page_no,
                     "source": "marker",
                     "shared_page": len(unique_qids) > 1,
-                    "marker_confidence": "strong" if strong_marker_seen else "medium",
+                    "marker_confidence": marker_confidence,
                 },
             )
             if text:
@@ -314,27 +512,64 @@ def build_question_answer_map(
             entry["shared_page"] = entry["shared_page"] or len(unique_qids) > 1
             entry["primary_page"] = min(int(entry["primary_page"]), page_no)
             entry["marker_confidence"] = (
-                "strong"
-                if entry.get("marker_confidence") == "strong" or strong_marker_seen
-                else "medium"
+                marker_confidence
+                if marker_confidence != "medium"
+                else (
+                    "strong"
+                    if entry.get("marker_confidence") == "strong" or strong_marker_seen
+                    else "medium"
+                )
             )
+            page_last_qid[page_no] = qid
 
     # Fallback for pages that do not expose explicit question markers.
+    running_previous_qid: Optional[int] = None
     for page_no, page_data in sorted(pages.items()):
         if page_no in pages_with_marker_segments:
-            continue
-        if page_no not in allowed_qids or page_no in answer_map:
+            running_previous_qid = page_last_qid.get(page_no, running_previous_qid)
             continue
 
-        answer_map[page_no] = {
-            "question_id": page_no,
-            "text_parts": [_normalize_inline_text(str(page_data.get("text", "")))],
-            "page_numbers": [page_no],
-            "primary_page": page_no,
-            "source": "page",
-            "shared_page": False,
-            "marker_confidence": "page",
-        }
+        page_text = _normalize_inline_text(str(page_data.get("text", "")))
+        qid: Optional[int] = None
+        marker_confidence = "page"
+
+        if keywords:
+            qid, marker_confidence, _ = _classify_page_question(
+                page_text,
+                allowed_qids,
+                keywords,
+                running_previous_qid if continue_unmarked_pages else None,
+            )
+            if qid is not None and qid not in allowed_qids:
+                qid = None
+
+        if qid is None and page_no in allowed_qids:
+            qid = page_no
+            marker_confidence = "page"
+
+        if qid is None:
+            continue
+
+        entry = answer_map.setdefault(
+            qid,
+            {
+                "question_id": qid,
+                "text_parts": [],
+                "page_numbers": [],
+                "primary_page": page_no,
+                "source": "page",
+                "shared_page": False,
+                "marker_confidence": marker_confidence,
+            },
+        )
+        if page_text:
+            entry["text_parts"].append(page_text)
+        entry["page_numbers"].append(page_no)
+        entry["primary_page"] = min(int(entry["primary_page"]), page_no)
+        if marker_confidence != "page":
+            entry["source"] = "keyword"
+        entry["marker_confidence"] = marker_confidence
+        running_previous_qid = qid
 
     finalized: Dict[int, Dict[str, Any]] = {}
     for qid, entry in answer_map.items():
@@ -349,6 +584,212 @@ def build_question_answer_map(
             "source": str(entry["source"]),
             "shared_page": bool(entry["shared_page"]),
             "marker_confidence": str(entry.get("marker_confidence", entry["source"])),
+        }
+
+    return finalized
+
+
+def _classify_segment_question(
+    marker_qid: int,
+    segment_text: str,
+    known_qids: Iterable[int],
+    question_keywords: Dict[int, List[str]],
+) -> Tuple[Optional[int], str, float]:
+    keyword_scores = {
+        int(qid): _keyword_hit_score(segment_text, question_keywords.get(int(qid), []))
+        for qid in known_qids
+    }
+    if not keyword_scores:
+        return marker_qid, "marker", 0.0
+
+    top_qid = max(keyword_scores, key=lambda qid: keyword_scores[qid])
+    top_score = keyword_scores.get(top_qid, 0.0)
+    marker_score = keyword_scores.get(int(marker_qid), 0.0)
+
+    if top_qid != marker_qid and top_score >= max(marker_score + 6.0, 7.0):
+        return top_qid, "keyword-corrected-marker", top_score
+
+    return marker_qid, "marker", marker_score
+
+
+def _coerce_question_keywords(
+    question_keywords: Optional[Dict[Any, Any]],
+    known_qids: Iterable[int],
+) -> Dict[int, List[str]]:
+    allowed = {int(qid) for qid in known_qids}
+    coerced: Dict[int, List[str]] = {}
+    if question_keywords:
+        for raw_qid, raw_keywords in question_keywords.items():
+            try:
+                qid = int(raw_qid)
+            except (TypeError, ValueError):
+                continue
+            if qid not in allowed:
+                continue
+            if isinstance(raw_keywords, str):
+                keywords = [raw_keywords]
+            else:
+                keywords = [str(keyword) for keyword in (raw_keywords or []) if str(keyword).strip()]
+            if keywords:
+                coerced[qid] = keywords
+
+    for qid in allowed:
+        if qid not in coerced and qid in DEFAULT_QUESTION_KEYWORDS:
+            coerced[qid] = DEFAULT_QUESTION_KEYWORDS[qid]
+
+    return coerced
+
+
+def _question_keyword_map_from_rubric(rubric: Dict[str, Any]) -> Dict[int, List[str]]:
+    keywords: Dict[int, List[str]] = {}
+    for qid_raw, config in rubric.items():
+        try:
+            qid = int(qid_raw)
+        except (TypeError, ValueError):
+            continue
+        keywords.setdefault(qid, list(DEFAULT_QUESTION_KEYWORDS.get(qid, [])))
+        if not isinstance(config, dict):
+            continue
+        raw_keywords = config.get("keywords") or config.get("question_keywords")
+        if isinstance(raw_keywords, str):
+            keywords.setdefault(qid, []).append(raw_keywords)
+        elif raw_keywords:
+            keywords.setdefault(qid, []).extend(
+                str(keyword) for keyword in raw_keywords if str(keyword).strip()
+            )
+
+    deduped: Dict[int, List[str]] = {}
+    for qid, values in keywords.items():
+        seen: set[str] = set()
+        merged: List[str] = []
+        for value in values:
+            normalized = _normalize_keyword_text(str(value))
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            merged.append(str(value))
+        deduped[qid] = merged
+
+    return deduped
+
+
+def _detect_explicit_question_marker(
+    text: str,
+    known_qids: Iterable[int],
+) -> Optional[Tuple[int, str]]:
+    # Give strong "Question/Answer No" markers priority, but avoid treating a
+    # bare leading number as a question number. Handwritten OCR often reads list
+    # items or truth-table rows as "6 ..." and the previous splitter then moved
+    # entire pages to the wrong question.
+    return extract_question_marker(
+        text,
+        known_qids=known_qids,
+        allow_loose_numeric_markers=False,
+    )
+
+
+def _classify_page_question(
+    page_text: str,
+    known_qids: Iterable[int],
+    question_keywords: Dict[int, List[str]],
+    previous_qid: Optional[int],
+) -> Tuple[Optional[int], str, float]:
+    allowed = sorted({int(qid) for qid in known_qids})
+    normalized_text = _normalize_inline_text(page_text)
+    if not normalized_text:
+        return previous_qid, "empty-continuation" if previous_qid else "empty", 0.0
+
+    explicit = _detect_explicit_question_marker(normalized_text[:350], allowed)
+    keyword_scores = {
+        qid: _keyword_hit_score(normalized_text, question_keywords.get(qid, []))
+        for qid in allowed
+    }
+    top_qid = max(keyword_scores, key=lambda qid: keyword_scores[qid]) if keyword_scores else None
+    top_score = keyword_scores.get(top_qid or -1, 0.0)
+
+    if explicit is not None:
+        explicit_qid, marker_type = explicit
+        explicit_keyword_score = keyword_scores.get(explicit_qid, 0.0)
+        if top_qid is not None and top_qid != explicit_qid and top_score >= max(explicit_keyword_score + 6.0, 7.0):
+            return top_qid, "keyword-corrected-marker", top_score
+        return explicit_qid, f"explicit-{marker_type}", max(explicit_keyword_score, top_score)
+
+    if top_qid is not None and top_score >= 3.0:
+        return top_qid, "keyword", top_score
+
+    if previous_qid is not None:
+        return previous_qid, "continuation", top_score
+
+    return None, "unclassified", top_score
+
+
+def build_keyword_question_answer_map(
+    base_name: str,
+    ocr_root: str,
+    known_qids: Iterable[int],
+    question_keywords: Optional[Dict[Any, Any]] = None,
+) -> Dict[int, Dict[str, Any]]:
+    """
+    Build question-wise answers using page-level topic classification.
+
+    This is safer for handwritten answer books where OCR reads answer markers
+    imperfectly and where one answer may span multiple pages. The old splitter
+    could misread a bare list number as a question number; this classifier uses
+    explicit markers, topic keywords, and continuation pages together.
+    """
+    pages = load_ocr_pages(base_name, ocr_root)
+    allowed_qids = sorted({int(qid) for qid in known_qids})
+    keywords = _coerce_question_keywords(question_keywords, allowed_qids)
+    answer_map: Dict[int, Dict[str, Any]] = {}
+    previous_qid: Optional[int] = None
+
+    for page_no, page_data in sorted(pages.items()):
+        text = _normalize_inline_text(str(page_data.get("text", "")))
+        qid, source, score = _classify_page_question(
+            page_text=text,
+            known_qids=allowed_qids,
+            question_keywords=keywords,
+            previous_qid=previous_qid,
+        )
+        if qid is None or qid not in allowed_qids:
+            continue
+
+        previous_qid = qid
+        entry = answer_map.setdefault(
+            qid,
+            {
+                "question_id": qid,
+                "text_parts": [],
+                "page_numbers": [],
+                "primary_page": page_no,
+                "source": "keyword",
+                "shared_page": False,
+                "marker_confidence": source,
+                "classification_scores": [],
+            },
+        )
+        if text:
+            entry["text_parts"].append(text)
+        entry["page_numbers"].append(page_no)
+        entry["primary_page"] = min(int(entry["primary_page"]), page_no)
+        entry["classification_scores"].append({"page": page_no, "source": source, "score": score})
+        if source.startswith("explicit"):
+            entry["marker_confidence"] = source
+
+    finalized: Dict[int, Dict[str, Any]] = {}
+    for qid, entry in answer_map.items():
+        combined_text = "\n".join(
+            part for part in entry.pop("text_parts", []) if _normalize_inline_text(part)
+        ).strip()
+        finalized[qid] = {
+            "question_id": int(entry["question_id"]),
+            "text": combined_text,
+            "page_numbers": sorted({int(page_no) for page_no in entry["page_numbers"]}),
+            "primary_page": int(entry["primary_page"]),
+            "source": str(entry["source"]),
+            "shared_page": bool(entry["shared_page"] or len(set(entry["page_numbers"])) > 1),
+            "marker_confidence": str(entry.get("marker_confidence", entry["source"])),
+            "classification_scores": entry.get("classification_scores", []),
         }
 
     return finalized
@@ -569,6 +1010,7 @@ class Evaluator:
         text_w = float(rub.get("text_weight", 0.7))
         diagram_w = float(rub.get("diagram_weight", 0.3))
         formula_w = float(rub.get("formula_weight", 0.0))
+        use_symbolic_formula_score = bool(rub.get("use_symbolic_formula_score", True))
         # IMPORTANT: default is True -> missing diagram is a penalty
         penalize_missing_diagram = bool(rub.get("penalize_missing_diagram", True))
         penalize_missing_formula = bool(rub.get("penalize_missing_formula", True))
@@ -608,7 +1050,11 @@ class Evaluator:
         raw_formula_sim: Optional[float] = None
         formula_feedback = ""
 
-        if not ideal_formulas:
+        if not use_symbolic_formula_score:
+            formula_w = 0.0
+            raw_formula_sim = None
+            formula_feedback = "Symbolic formula scoring is disabled by the rubric for this question."
+        elif not ideal_formulas:
             formula_w = 0.0
         else:
             if student_formulas:
@@ -733,16 +1179,22 @@ class Evaluator:
 
         ideal_ocr = load_ocr_pages(ideal_base, self.config.ocr_root)
         known_qids = sorted(int(qid) for qid in self.rubric.keys())
+        question_keywords = _question_keyword_map_from_rubric(self.rubric)
         ideal_answers = build_question_answer_map(
             ideal_base,
             self.config.ocr_root,
             known_qids,
             allow_loose_numeric_markers=False,
+            question_keywords=question_keywords,
+            continue_unmarked_pages=True,
         )
         student_answers = build_question_answer_map(
             student_base,
             self.config.ocr_root,
             known_qids,
+            allow_loose_numeric_markers=False,
+            question_keywords=question_keywords,
+            continue_unmarked_pages=True,
         )
 
         results: List[Dict[str, Any]] = []

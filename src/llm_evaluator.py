@@ -35,6 +35,7 @@ from evaluation_core import (
     base_name_from_pdf,
     load_rubric,
     build_question_answer_map,
+    _question_keyword_map_from_rubric,
 )
 from formula_evaluator import load_formula_page, score_formula_sets
 
@@ -333,6 +334,7 @@ class LlmEvaluator:
         diagram_max: float,
         has_ideal_diagram: bool,
         has_student_diagram: bool,
+        holistic_scoring: bool,
     ) -> str:
         """
         Build a text prompt for Gemini. We send ideal + student diagrams as images.
@@ -346,6 +348,14 @@ class LlmEvaluator:
             if (has_ideal_diagram and has_student_diagram)
             else "No diagrams or only one diagram image may be provided; "
                  "if the student's diagram is missing or clearly poor, the diagram_score should be low or zero."
+        )
+
+        holistic_note = (
+            "Treat OCR noise, spelling mistakes, and handwriting distortions generously. "
+            "Focus on whether the student has expressed the correct idea for the question, "
+            "not on exact token matches."
+            if holistic_scoring
+            else "Grade strictly against the rubric and the ideal answer."
         )
 
         prompt = f"""
@@ -377,6 +387,7 @@ Student answer text:
 Instructions:
 - First, evaluate ONLY the student's TEXT (ignoring diagrams). Compare it with the ideal text in terms of
   factual correctness, completeness, relevance, clarity, and coverage of key points.
+- {holistic_note}
 - Give a numeric text_score between 0 and {text_max} based on how strong the student's text is.
 - Second, evaluate ONLY the student's DIAGRAM (if available) compared to the ideal diagram and the rubric.
   Consider structure, correctness of components, labels, and clarity.
@@ -560,16 +571,22 @@ Do not include any extra keys. Do not include explanations outside the JSON.
 
         ideal_ocr = load_ocr_pages(ideal_base, self.config.ocr_root)
         known_qids = sorted(int(qid) for qid in self.rubric.keys())
+        question_keywords = _question_keyword_map_from_rubric(self.rubric)
         ideal_answers = build_question_answer_map(
             ideal_base,
             self.config.ocr_root,
             known_qids,
             allow_loose_numeric_markers=False,
+            question_keywords=question_keywords,
+            continue_unmarked_pages=True,
         )
         student_answers = build_question_answer_map(
             student_base,
             self.config.ocr_root,
             known_qids,
+            allow_loose_numeric_markers=False,
+            question_keywords=question_keywords,
+            continue_unmarked_pages=True,
         )
 
         results: List[Dict[str, Any]] = []
@@ -585,6 +602,8 @@ Do not include any extra keys. Do not include explanations outside the JSON.
             text_max = comp_max["text_max"]
             diagram_max = comp_max["diagram_max"]
             formula_max = comp_max["formula_max"]
+            use_symbolic_formula_score = bool(rubric_for_q.get("use_symbolic_formula_score", True))
+            holistic_scoring = bool(rubric_for_q.get("llm_full_question_score", False))
 
             max_total += max_marks
 
@@ -652,6 +671,7 @@ Do not include any extra keys. Do not include explanations outside the JSON.
                 diagram_max=diagram_max,
                 has_ideal_diagram=has_ideal_diagram,
                 has_student_diagram=has_student_diagram,
+                holistic_scoring=holistic_scoring,
             )
 
             try:
@@ -695,7 +715,7 @@ Do not include any extra keys. Do not include explanations outside the JSON.
             formula_similarity = None
             formula_feedback = ""
             formula_score = 0.0
-            if formula_max > 0:
+            if formula_max > 0 and use_symbolic_formula_score:
                 formula_similarity, formula_feedback = score_formula_sets(
                     ideal_formulas,
                     student_formulas,

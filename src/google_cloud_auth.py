@@ -252,12 +252,23 @@ def get_google_auth_credentials():
         except Exception:
             pass
 
-    token = get_gcloud_access_token()
-    if token:
-        credentials = GcloudAccessTokenCredentials(quota_project_id=project_id)
-        credentials.token = token
-        credentials.expiry = _utcnow_naive() + _dt.timedelta(minutes=45)
-        return credentials
+    allow_gcloud_token_fallback = (
+        os.environ.get("ALLOW_GCLOUD_ACCESS_TOKEN_FALLBACK", "").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+    if allow_gcloud_token_fallback:
+        token = get_gcloud_access_token()
+        if token:
+            credentials = GcloudAccessTokenCredentials(quota_project_id=project_id)
+            credentials.token = token
+            credentials.expiry = _utcnow_naive() + _dt.timedelta(minutes=45)
+            return credentials
+
+    raise RuntimeError(
+        "Google Application Default Credentials are required for Google Vision and Vertex AI. "
+        "Run `gcloud auth application-default login` locally, or deploy with a Google Cloud "
+        "service account / metadata identity that has Vision and Vertex permissions."
+    )
 
     raise RuntimeError(
         "Google Cloud credentials are not available. Either run "

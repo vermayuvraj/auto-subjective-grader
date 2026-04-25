@@ -15,36 +15,51 @@ async function proxyRequest(
   request: NextRequest,
   pathSegments: string[]
 ): Promise<NextResponse> {
-  const targetUrl = buildTargetUrl(pathSegments, request.nextUrl.search);
+  try {
+    const targetUrl = buildTargetUrl(pathSegments, request.nextUrl.search);
 
-  const headers = new Headers(request.headers);
-  headers.delete("host");
-  headers.delete("connection");
-  headers.delete("content-length");
+    const headers = new Headers(request.headers);
+    headers.delete("host");
+    headers.delete("connection");
+    headers.delete("content-length");
 
-  const init: RequestInit & { duplex?: "half" } = {
-    method: request.method,
-    headers,
-    redirect: "follow",
-    cache: "no-store",
-  };
+    const init: RequestInit & { duplex?: "half" } = {
+      method: request.method,
+      headers,
+      redirect: "follow",
+      cache: "no-store",
+    };
 
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    init.body = request.body;
-    init.duplex = "half";
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      init.body = request.body;
+      init.duplex = "half";
+    }
+
+    const upstream = await fetch(targetUrl, init);
+    const responseHeaders = new Headers(upstream.headers);
+    responseHeaders.delete("content-encoding");
+    responseHeaders.delete("content-length");
+    responseHeaders.delete("transfer-encoding");
+
+    return new NextResponse(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    const detail =
+      error instanceof Error
+        ? error.message
+        : "The web proxy could not reach the backend API.";
+    return NextResponse.json(
+      {
+        detail,
+      },
+      {
+        status: 502,
+      }
+    );
   }
-
-  const upstream = await fetch(targetUrl, init);
-  const responseHeaders = new Headers(upstream.headers);
-  responseHeaders.delete("content-encoding");
-  responseHeaders.delete("content-length");
-  responseHeaders.delete("transfer-encoding");
-
-  return new NextResponse(upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: responseHeaders,
-  });
 }
 
 type RouteContext = {

@@ -1,82 +1,102 @@
 {
   "1": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
-    "penalize_missing_diagram": true,
-    "penalize_missing_formula": true
+    "text_weight": 0.75,
+    "diagram_weight": 0.25,
+    "formula_weight": 0.0,
+    "penalize_missing_diagram": false,
+    "penalize_missing_formula": false,
+    "llm_full_question_score": true,
+    "use_symbolic_formula_score": false
   },
   "2": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
-    "penalize_missing_diagram": true,
-    "penalize_missing_formula": true
+    "text_weight": 0.7,
+    "diagram_weight": 0.3,
+    "formula_weight": 0.0,
+    "penalize_missing_diagram": false,
+    "penalize_missing_formula": false,
+    "llm_full_question_score": true,
+    "use_symbolic_formula_score": false
   },
   "3": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
-    "penalize_missing_diagram": true,
-    "penalize_missing_formula": true
+    "text_weight": 0.85,
+    "diagram_weight": 0.15,
+    "formula_weight": 0.0,
+    "penalize_missing_diagram": false,
+    "penalize_missing_formula": false,
+    "llm_full_question_score": true,
+    "use_symbolic_formula_score": false
   },
   "4": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
-    "penalize_missing_diagram": true,
-    "penalize_missing_formula": true
+    "text_weight": 0.45,
+    "diagram_weight": 0.55,
+    "formula_weight": 0.0,
+    "penalize_missing_diagram": false,
+    "penalize_missing_formula": false,
+    "llm_full_question_score": true,
+    "use_symbolic_formula_score": false
   },
   "5": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
-    "penalize_missing_diagram": true,
-    "penalize_missing_formula": true
+    "text_weight": 0.55,
+    "diagram_weight": 0.45,
+    "formula_weight": 0.0,
+    "penalize_missing_diagram": false,
+    "penalize_missing_formula": false,
+    "llm_full_question_score": true,
+    "use_symbolic_formula_score": false
   },
   "6": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
-    "penalize_missing_diagram": true,
-    "penalize_missing_formula": true
+    "text_weight": 1.0,
+    "diagram_weight": 0.0,
+    "formula_weight": 0.0,
+    "penalize_missing_diagram": false,
+    "penalize_missing_formula": false,
+    "llm_full_question_score": true,
+    "use_symbolic_formula_score": false
   },
   "7": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
-    "penalize_missing_diagram": true,
-    "penalize_missing_formula": true
+    "text_weight": 0.55,
+    "diagram_weight": 0.45,
+    "formula_weight": 0.0,
+    "penalize_missing_diagram": false,
+    "penalize_missing_formula": false,
+    "llm_full_question_score": true,
+    "use_symbolic_formula_score": false
   },
   "8": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
-    "penalize_missing_diagram": true,
-    "penalize_missing_formula": true
+    "text_weight": 0.55,
+    "diagram_weight": 0.45,
+    "formula_weight": 0.0,
+    "penalize_missing_diagram": false,
+    "penalize_missing_formula": false,
+    "llm_full_question_score": true,
+    "use_symbolic_formula_score": false
   },
   "9": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
-    "penalize_missing_diagram": true,
-    "penalize_missing_formula": true
+    "text_weight": 0.75,
+    "diagram_weight": 0.25,
+    "formula_weight": 0.0,
+    "penalize_missing_diagram": false,
+    "penalize_missing_formula": false,
+    "llm_full_question_score": true,
+    "use_symbolic_formula_score": false
   },
   "10": {
     "max_marks": 10,
-    "text_weight": 0.6,
-    "diagram_weight": 0.4,
-    "formula_weight": 0.2,
-    "penalize_missing_diagram": true,
-    "penalize_missing_formula": true
+    "text_weight": 0.8,
+    "diagram_weight": 0.2,
+    "formula_weight": 0.0,
+    "penalize_missing_diagram": false,
+    "penalize_missing_formula": false,
+    "llm_full_question_score": true,
+    "use_symbolic_formula_score": false
   }
 }
