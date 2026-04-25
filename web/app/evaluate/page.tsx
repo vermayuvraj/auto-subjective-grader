@@ -476,6 +476,47 @@ function getRunElapsedSeconds(run: RunMeta | null): number | null {
   return Math.max((Date.now() - parsed) / 1000, 0);
 }
 
+function getVisibleCurrentStep(run: RunMeta | null): number {
+  if (!run) {
+    return 0;
+  }
+
+  if (run.status === "queued") {
+    return 0;
+  }
+
+  if (run.status === "completed") {
+    return Math.max(run.current_step, run.total_steps, 1);
+  }
+
+  if (run.current_step > 0) {
+    return run.current_step;
+  }
+
+  if (run.total_steps > 0 || run.message.trim()) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function getEffectiveProgressPercent(run: RunMeta | null): number {
+  if (!run) {
+    return 0;
+  }
+
+  if (run.progress_percent > 0) {
+    return run.progress_percent;
+  }
+
+  const visibleStep = getVisibleCurrentStep(run);
+  if (visibleStep > 0 && run.total_steps > 0) {
+    return Math.max(Math.round((visibleStep / run.total_steps) * 100), 4);
+  }
+
+  return 0;
+}
+
 function getStepsPerMinute(run: RunMeta | null): string {
   const elapsedSeconds = getRunElapsedSeconds(run);
   if (!run || !elapsedSeconds || run.current_step === 0) {
@@ -1254,12 +1295,15 @@ export default function EvaluatePage() {
                 <div className="progress-shell">
                   <div className="progress-meta">
                     <strong>
-                      Step {currentRun.current_step} of {currentRun.total_steps || "?"}
+                      Step {getVisibleCurrentStep(currentRun)} of {currentRun.total_steps || "?"}
                     </strong>
-                    <span>{currentRun.progress_percent}% complete</span>
+                    <span>{getEffectiveProgressPercent(currentRun)}% complete</span>
                   </div>
                   <div className="progress-track">
-                    <div className="progress-fill" style={{ width: `${Math.max(currentRun.progress_percent, 4)}%` }} />
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${Math.max(getEffectiveProgressPercent(currentRun), 4)}%` }}
+                    />
                   </div>
                 </div>
 
