@@ -2,7 +2,7 @@
 
 import { FormEvent, SVGProps, useEffect, useMemo, useRef, useState } from "react";
 import { SectionShell } from "../../components/section-shell";
-import { BROWSER_API_BASE_URL } from "../../lib/api";
+import { getBrowserApiBaseUrl } from "../../lib/api";
 
 type SummaryRow = {
   rank: number;
@@ -568,6 +568,7 @@ export default function EvaluatePage() {
   const [historyLoadErrors, setHistoryLoadErrors] = useState<Record<string, string>>({});
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [isHostedDeployment, setIsHostedDeployment] = useState(false);
+  const browserApiBaseUrl = useMemo(() => getBrowserApiBaseUrl(), []);
 
   const requiresAzure = useMemo(() => ocrBackend === "azure", [ocrBackend]);
   const needsManualAzureSecrets = requiresAzure && !runtimeConfig?.azure_configured;
@@ -632,8 +633,8 @@ export default function EvaluatePage() {
     async function loadHistory() {
       try {
         const [historyResponse, runtimeResponse] = await Promise.all([
-          fetch(`${BROWSER_API_BASE_URL}/jobs`, { cache: "no-store" }),
-          fetch(`${BROWSER_API_BASE_URL}/runtime-config`, { cache: "no-store" }),
+          fetch(`${browserApiBaseUrl}/jobs`, { cache: "no-store" }),
+          fetch(`${browserApiBaseUrl}/runtime-config`, { cache: "no-store" }),
         ]);
 
         if (!historyResponse.ok) {
@@ -671,8 +672,8 @@ export default function EvaluatePage() {
       async function refreshRun() {
         try {
           const [runResponse, jobsResponse] = await Promise.all([
-            fetch(`${BROWSER_API_BASE_URL}/jobs/${activeRunId}`, { cache: "no-store" }),
-            fetch(`${BROWSER_API_BASE_URL}/jobs`, { cache: "no-store" }),
+            fetch(`${browserApiBaseUrl}/jobs/${activeRunId}`, { cache: "no-store" }),
+            fetch(`${browserApiBaseUrl}/jobs`, { cache: "no-store" }),
           ]);
 
           if (!runResponse.ok) {
@@ -700,7 +701,7 @@ export default function EvaluatePage() {
   async function refreshHistory(options?: { silent?: boolean }) {
     setIsHistoryLoading(true);
     try {
-      const response = await fetch(`${BROWSER_API_BASE_URL}/jobs`, { cache: "no-store" });
+      const response = await fetch(`${browserApiBaseUrl}/jobs`, { cache: "no-store" });
       if (!response.ok) {
         throw new Error("Unable to refresh recent runs.");
       }
@@ -740,7 +741,7 @@ export default function EvaluatePage() {
     setHistoryLoadErrors((current) => ({ ...current, [runId]: "" }));
 
     try {
-      const response = await fetch(`${BROWSER_API_BASE_URL}/runs/${runId}`, { cache: "no-store" });
+      const response = await fetch(`${browserApiBaseUrl}/runs/${runId}`, { cache: "no-store" });
       const data = await readApiPayload<RunMeta>(response);
       if (!response.ok) {
         throw new Error("detail" in data && data.detail ? data.detail : "Unable to load the selected run.");
@@ -772,7 +773,7 @@ export default function EvaluatePage() {
   }
 
   async function createUploadSession(): Promise<string> {
-    const response = await fetch(`${BROWSER_API_BASE_URL}/upload-sessions`, {
+    const response = await fetch(`${browserApiBaseUrl}/upload-sessions`, {
       method: "POST",
     });
     const data = await readApiPayload<UploadSessionResponse>(response);
@@ -791,7 +792,7 @@ export default function EvaluatePage() {
     formData.append("kind", kind);
     formData.append("file", file);
 
-    const response = await fetch(`${BROWSER_API_BASE_URL}/upload-sessions/${sessionId}/files`, {
+    const response = await fetch(`${browserApiBaseUrl}/upload-sessions/${sessionId}/files`, {
       method: "POST",
       body: formData,
     });
@@ -814,7 +815,7 @@ export default function EvaluatePage() {
       formData.append("azure_key", azureKey);
     }
 
-    const response = await fetch(`${BROWSER_API_BASE_URL}/upload-sessions/${sessionId}/jobs`, {
+    const response = await fetch(`${browserApiBaseUrl}/upload-sessions/${sessionId}/jobs`, {
       method: "POST",
       body: formData,
     });
@@ -983,7 +984,7 @@ export default function EvaluatePage() {
           setCurrentRun(null);
         }
 
-        const response = await fetch(`${BROWSER_API_BASE_URL}${endpoint}`, {
+        const response = await fetch(`${browserApiBaseUrl}${endpoint}`, {
           method: "POST",
           body: formData,
         });
@@ -1360,7 +1361,7 @@ export default function EvaluatePage() {
                         {report ? (
                           <a
                             className="link-chip"
-                            href={`${BROWSER_API_BASE_URL}${report.download_url.replace(/^\/api/, "")}`}
+                            href={`${browserApiBaseUrl}${report.download_url.replace(/^\/api/, "")}`}
                             target="_blank"
                             rel="noreferrer"
                           >

@@ -1157,28 +1157,34 @@ def render_workflow_section() -> None:
 
 def render_home_tab() -> None:
     render_section_header(
-        "Project Overview",
-        "Automated subjective answer-sheet evaluation for text, diagrams, formulas, and handwritten submissions.",
+        "Automated Subjective Answer Sheet Evaluation System",
+        "Ai Grader combines OCR, formula understanding, diagram-aware analysis, and rubric-based scoring in one academic product workflow.",
     )
     st.markdown(
         """
         <div class="simple-home-grid">
             <div class="simple-home-card">
-                <div class="simple-home-title">What It Does</div>
+                <div class="simple-home-title">Input Pack</div>
                 <div class="simple-home-desc">
-                    Runs OCR, extracts formulas and diagrams, evaluates answers, and generates student-wise PDF reports.
+                    The system accepts the ideal answer sheet, rubric JSON, and a full batch of student PDFs for one traceable evaluation run.
                 </div>
             </div>
             <div class="simple-home-card">
-                <div class="simple-home-title">Who It Helps</div>
+                <div class="simple-home-title">Recognition Layer</div>
                 <div class="simple-home-desc">
-                    Built for faculty demos, research experiments, and future product deployment workflows.
+                    Printed sheets use OCR extraction, while handwritten sheets can move through Google Vision AI or Azure Document Intelligence.
                 </div>
             </div>
             <div class="simple-home-card">
-                <div class="simple-home-title">Current Modes</div>
+                <div class="simple-home-title">Multimodal Analysis</div>
                 <div class="simple-home-desc">
-                    Printed OCR, handwritten OCR, SBERT local scoring, Gemini evaluation, and formula-aware grading.
+                    Text, formula regions, and diagrams are treated as separate evidence streams instead of being flattened into plain OCR text.
+                </div>
+            </div>
+            <div class="simple-home-card">
+                <div class="simple-home-title">Scoring And Reports</div>
+                <div class="simple-home-desc">
+                    SBERT or Gemini applies rubric-aware grading, generates ranking tables, and produces downloadable student reports.
                 </div>
             </div>
         </div>
@@ -1811,6 +1817,19 @@ def render_evaluate_tab() -> None:
             key="rubric-json",
         )
 
+        sample_rubric_bytes = b"{}"
+        if os.path.exists(RUBRIC_PATH):
+            with open(RUBRIC_PATH, "rb") as rubric_stream:
+                sample_rubric_bytes = rubric_stream.read()
+        st.download_button(
+            "Download sample rubric",
+            data=sample_rubric_bytes,
+            file_name="sample_rubric.json",
+            mime="application/json",
+            width="content",
+            key="download-sample-rubric",
+        )
+
         student_pdfs = st.file_uploader(
             "Student Answer Sheets (PDF, multiple allowed)",
             type=["pdf"],
@@ -1821,7 +1840,7 @@ def render_evaluate_tab() -> None:
 
     with col_right:
         st.subheader("Execution Settings")
-        engine_choice = st.radio(
+        engine_choice = st.selectbox(
             "Evaluation Engine",
             ["SBERT (fast, local)", "Gemini 2.5 Flash (Vertex AI)"],
             help="Use SBERT for fast local scoring or Gemini for LLM-assisted evaluation.",
@@ -1831,7 +1850,7 @@ def render_evaluate_tab() -> None:
             "Formula-aware parsing using pix2tex + SymPy now runs before scoring for both SBERT and Gemini paths when formulas are detected."
         )
 
-        ocr_mode = st.radio(
+        ocr_mode = st.selectbox(
             "OCR Mode",
             [
                 "Current/printed sheets (EasyOCR)",
@@ -2250,17 +2269,17 @@ def main():
     st.markdown(
         """
         <section class="section-card" style="padding-bottom: 18px;">
-            <div class="section-heading">Platform Navigation</div>
+            <div class="section-heading">Ai Grader Workspace</div>
             <div class="section-subtext">
-                Move from overview to evaluation, then review the full technical documentation before opening the team and supporting tabs.
+                The Streamlit workspace now follows the same four-section structure as the web app: Home, Evaluate, Documentation, and Team.
             </div>
         </section>
         """,
         unsafe_allow_html=True,
     )
 
-    home_tab, evaluate_tab, docs_tab, team_tab, paper_tab, resources_tab = st.tabs(
-        ["Home", "Evaluate", "Documentation", "Team", "Research Paper", "Resources"]
+    home_tab, evaluate_tab, docs_tab, team_tab = st.tabs(
+        ["Home", "Evaluate", "Documentation", "Team"]
     )
 
     with home_tab:
@@ -2278,13 +2297,6 @@ def main():
             "Meet the people behind the project, their roles, and how they contribute to the platform.",
         )
         render_team_section()
-
-    with paper_tab:
-        render_research_paper_tab()
-
-    with resources_tab:
-        render_resources_tab()
-
 
 if __name__ == "__main__":
     main()
