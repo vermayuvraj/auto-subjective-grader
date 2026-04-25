@@ -132,6 +132,7 @@ class LlmEvalConfig:
     rubric_path: str = "rubric.json"
     model_name: str = "gemini-2.5-flash"
     default_location: str = "global"
+    ocr_backend: str = "easyocr"
 
 
 class LlmEvaluator:
@@ -207,6 +208,7 @@ class LlmEvaluator:
                     diagram_root=self.config.diagram_root,
                     formula_root=self.config.formula_root,
                     rubric_path=self.config.rubric_path,
+                    ocr_backend=self.config.ocr_backend,
                 )
                 self._fallback_evaluator = evaluation_core.Evaluator(fallback_cfg)
         return self._fallback_evaluator
@@ -725,11 +727,23 @@ Do not include any extra keys. Do not include explanations outside the JSON.
 
             score = max(0.0, min(max_marks, score + formula_score))
 
-            total_score += score
-
             # Convert to similarity-style fractions (0..1) for compatibility
             text_sim = (text_score / text_max) if text_max > 0 else None
             diagram_sim = (diagram_score / diagram_max) if diagram_max > 0 else None
+
+            score = evaluation_core.apply_question_score_calibration(
+                question_rubric=rubric_for_q,
+                raw_score=score,
+                max_marks=max_marks,
+                text_similarity=text_sim,
+                diagram_similarity=diagram_sim,
+                formula_similarity=formula_similarity,
+                engine_name="LLM",
+                ocr_backend=self.config.ocr_backend,
+            )
+
+            total_score += score
+
             combined_feedback = feedback.strip()
             if formula_similarity is not None and formula_feedback:
                 combined_feedback = (

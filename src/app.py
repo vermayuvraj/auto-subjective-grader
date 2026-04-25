@@ -1542,6 +1542,7 @@ def get_local_runtime_status(ocr_backend: str) -> Dict[str, str]:
             "cuda_available": "No",
             "device_name": f"Unavailable ({exc})",
             "easyocr_gpu": "Disabled",
+            "model_gpu": "Disabled",
             "torch_version": "Unavailable",
         }
 
@@ -1557,6 +1558,7 @@ def get_local_runtime_status(ocr_backend: str) -> Dict[str, str]:
         "cuda_available": "Yes" if cuda_available else "No",
         "device_name": device_name,
         "easyocr_gpu": easyocr_gpu,
+        "model_gpu": "Enabled" if cuda_available else "Disabled",
         "torch_version": getattr(torch, "__version__", "Unknown"),
     }
 
@@ -1640,7 +1642,7 @@ def run_full_pipeline(
         sbert_eval_workers=2 if local_use_gpu else 1,
         llm_eval_workers=4,
         report_workers=6,
-        enable_formula_autoskip=True,
+        enable_formula_autoskip=(ocr_backend == "easyocr"),
     )
 
     all_results, eval_dir, report_dir, _ = pipeline_service.run_pipeline(
@@ -1870,6 +1872,7 @@ def render_evaluate_tab() -> None:
             <div class="results-note" style="margin: 0.9rem 0 0.2rem 0;">
                 <strong>CUDA available:</strong> {runtime_status['cuda_available']} &nbsp;&nbsp;|&nbsp;&nbsp;
                 <strong>Device:</strong> {runtime_status['device_name']} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>SBERT / CLIP GPU:</strong> {runtime_status['model_gpu']} &nbsp;&nbsp;|&nbsp;&nbsp;
                 <strong>EasyOCR GPU:</strong> {runtime_status['easyocr_gpu']} &nbsp;&nbsp;|&nbsp;&nbsp;
                 <strong>Torch:</strong> {runtime_status['torch_version']}
             </div>

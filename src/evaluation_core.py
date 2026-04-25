@@ -24,6 +24,7 @@ class EvalConfig:
     formula_root: str = "results/formulas"
     rubric_path: str = "rubric.json"
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    ocr_backend: str = "easyocr"
 
 
 # ---------- Utility loaders ----------
@@ -34,6 +35,89 @@ def load_rubric(rubric_path: str) -> Dict[str, Any]:
     with open(rubric_path, "r", encoding="utf-8") as f:
         rubric = json.load(f)
     return rubric
+
+
+def _coerce_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _calibration_applies(
+    calibration: Optional[Dict[str, Any]],
+    *,
+    engine_name: str,
+    ocr_backend: str,
+) -> bool:
+    if not isinstance(calibration, dict):
+        return False
+    if not bool(calibration.get("enabled", True)):
+        return False
+
+    allowed_engines = {
+        str(item).strip().upper()
+        for item in (calibration.get("engines") or [])
+        if str(item).strip()
+    }
+    if allowed_engines and engine_name.strip().upper() not in allowed_engines:
+        return False
+
+    allowed_backends = {
+        str(item).strip().lower()
+        for item in (calibration.get("ocr_backends") or [])
+        if str(item).strip()
+    }
+    if allowed_backends and ocr_backend.strip().lower() not in allowed_backends:
+        return False
+
+    return True
+
+
+def apply_question_score_calibration(
+    *,
+    question_rubric: Dict[str, Any],
+    raw_score: float,
+    max_marks: float,
+    text_similarity: Optional[float],
+    diagram_similarity: Optional[float],
+    formula_similarity: Optional[float],
+    engine_name: str,
+    ocr_backend: str,
+) -> float:
+    calibration = (
+        question_rubric.get("handwritten_calibration")
+        or question_rubric.get("score_calibration")
+    )
+    if not _calibration_applies(
+        calibration,
+        engine_name=engine_name,
+        ocr_backend=ocr_backend,
+    ):
+        return max(0.0, min(max_marks, raw_score))
+
+    calibrated_score = (
+        _coerce_float(calibration.get("intercept"), 0.0)
+        + (_coerce_float(calibration.get("raw_score_weight"), 1.0) * raw_score)
+        + (
+            _coerce_float(calibration.get("text_similarity_weight"), 0.0)
+            * _coerce_float(text_similarity, 0.0)
+        )
+        + (
+            _coerce_float(calibration.get("diagram_similarity_weight"), 0.0)
+            * _coerce_float(diagram_similarity, 0.0)
+        )
+        + (
+            _coerce_float(calibration.get("formula_similarity_weight"), 0.0)
+            * _coerce_float(formula_similarity, 0.0)
+        )
+    )
+
+    min_score = _coerce_float(calibration.get("min_score"), 0.0)
+    max_score = _coerce_float(calibration.get("max_score"), max_marks)
+    max_score = min(max_score, max_marks)
+    min_score = min(max(min_score, 0.0), max_score)
+    return max(min_score, min(max_score, calibrated_score))
 
 
 def base_name_from_pdf(pdf_path: str) -> str:
@@ -866,9 +950,13 @@ class TextSimilarityModel:
     def similarity(self, text_a: str, text_b: str) -> float:
         if not text_a.strip() or not text_b.strip():
             return 0.0
-        emb1 = self.model.encode(text_a, convert_to_tensor=True)
-        emb2 = self.model.encode(text_b, convert_to_tensor=True)
-        sim = util.cos_sim(emb1, emb2).item()  # [-1, 1]
+        embeddings = self.model.encode(
+            [text_a, text_b],
+            convert_to_tensor=True,
+            device=self.device,
+            normalize_embeddings=True,
+        )
+        sim = util.cos_sim(embeddings[0], embeddings[1]).item()  # [-1, 1]
         # Clamp to [0, 1]
         sim = max(0.0, min(1.0, sim))
         return sim
@@ -1103,6 +1191,28 @@ class Evaluator:
         text_contrib_marks = text_fraction * max_marks
         diagram_contrib_marks = diagram_fraction * max_marks
         formula_contrib_marks = formula_fraction * max_marks
+
+        calibrated_score = apply_question_score_calibration(
+            question_rubric=rub,
+            raw_score=score,
+            max_marks=max_marks,
+            text_similarity=raw_text_sim,
+            diagram_similarity=raw_diag_sim,
+            formula_similarity=raw_formula_sim,
+            engine_name="SBERT",
+            ocr_backend=self.config.ocr_backend,
+        )
+        if abs(calibrated_score - score) > 1e-6:
+            if score > 0:
+                scale = calibrated_score / score
+                text_contrib_marks *= scale
+                diagram_contrib_marks *= scale
+                formula_contrib_marks *= scale
+            else:
+                text_contrib_marks = calibrated_score * text_w_norm
+                diagram_contrib_marks = calibrated_score * diagram_w_norm
+                formula_contrib_marks = calibrated_score * formula_w_norm
+            score = calibrated_score
 
         # ----- feedback -----
         feedback_parts: List[str] = []

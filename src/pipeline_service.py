@@ -19,7 +19,7 @@ ProgressCallback = Callable[[int, int, str], None]
 _READER_CACHE_LOCK = threading.Lock()
 _EASYOCR_READER_CACHE: Dict[Tuple[Tuple[str, ...], bool], Any] = {}
 _FORMULA_READER: Any = None
-_EVALUATOR_CACHE: Dict[Tuple[str, str, str, str, str], Any] = {}
+_EVALUATOR_CACHE: Dict[Tuple[str, str, str, str, str, str], Any] = {}
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 
 
@@ -115,6 +115,7 @@ def _get_evaluator(
     rubric_signature: str,
     eval_dir: str,
     config: PipelineServiceConfig,
+    ocr_backend: str,
 ):
     if engine == "SBERT":
         import evaluation_core
@@ -125,6 +126,7 @@ def _get_evaluator(
             config.ocr_root,
             config.diagram_root,
             config.formula_root,
+            ocr_backend,
         )
         with _READER_CACHE_LOCK:
             if cache_key not in _EVALUATOR_CACHE:
@@ -133,6 +135,8 @@ def _get_evaluator(
                     diagram_root=config.diagram_root,
                     formula_root=config.formula_root,
                     rubric_path=config.rubric_path,
+                    device="cuda" if config.use_gpu else "cpu",
+                    ocr_backend=ocr_backend,
                 )
                 _EVALUATOR_CACHE[cache_key] = evaluation_core.Evaluator(eval_cfg)
             return _EVALUATOR_CACHE[cache_key]
@@ -145,6 +149,7 @@ def _get_evaluator(
         config.ocr_root,
         config.diagram_root,
         config.formula_root,
+        ocr_backend,
     )
     with _READER_CACHE_LOCK:
         if cache_key not in _EVALUATOR_CACHE:
@@ -153,6 +158,7 @@ def _get_evaluator(
                 diagram_root=config.diagram_root,
                 formula_root=config.formula_root,
                 rubric_path=config.rubric_path,
+                ocr_backend=ocr_backend,
             )
             _EVALUATOR_CACHE[cache_key] = llm_evaluator.LlmEvaluator(llm_cfg)
         return _EVALUATOR_CACHE[cache_key]
@@ -343,7 +349,7 @@ def run_pipeline(
         eval_dir = config.eval_llm_root
         report_dir = config.report_llm_root
 
-    evaluator = _get_evaluator(engine, rubric_signature, eval_dir, config)
+    evaluator = _get_evaluator(engine, rubric_signature, eval_dir, config, ocr_backend)
 
     os.makedirs(eval_dir, exist_ok=True)
     os.makedirs(report_dir, exist_ok=True)

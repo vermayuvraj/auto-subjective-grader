@@ -7,7 +7,29 @@
     "penalize_missing_diagram": false,
     "penalize_missing_formula": false,
     "llm_full_question_score": true,
-    "use_symbolic_formula_score": false
+    "use_symbolic_formula_score": false,
+    "question_keywords": [
+      "operational amplifier",
+      "op amp",
+      "inverting amplifier",
+      "virtual ground",
+      "voltage gain",
+      "feedback resistor",
+      "rin",
+      "rf"
+    ],
+    "handwritten_calibration": {
+      "enabled": true,
+      "ocr_backends": ["google_vision", "azure"],
+      "engines": ["LLM"],
+      "intercept": 5.727,
+      "raw_score_weight": 0.44,
+      "text_similarity_weight": -0.144,
+      "diagram_similarity_weight": 0.609,
+      "formula_similarity_weight": 0.0,
+      "min_score": 0.0,
+      "max_score": 10.0
+    }
   },
   "2": {
     "max_marks": 10,
@@ -17,7 +39,32 @@
     "penalize_missing_diagram": false,
     "penalize_missing_formula": false,
     "llm_full_question_score": true,
-    "use_symbolic_formula_score": false
+    "use_symbolic_formula_score": false,
+    "question_keywords": [
+      "multiplexer",
+      "multipuxer",
+      "raculcipuxer",
+      "demultiplexer",
+      "demultiplex",
+      "mux",
+      "muk",
+      "demux",
+      "select line",
+      "many to one",
+      "one to many"
+    ],
+    "handwritten_calibration": {
+      "enabled": true,
+      "ocr_backends": ["google_vision", "azure"],
+      "engines": ["LLM"],
+      "intercept": 7.381,
+      "raw_score_weight": 0.276,
+      "text_similarity_weight": 0.94,
+      "diagram_similarity_weight": -2.101,
+      "formula_similarity_weight": 0.0,
+      "min_score": 0.0,
+      "max_score": 10.0
+    }
   },
   "3": {
     "max_marks": 10,
@@ -27,7 +74,28 @@
     "penalize_missing_diagram": false,
     "penalize_missing_formula": false,
     "llm_full_question_score": true,
-    "use_symbolic_formula_score": false
+    "use_symbolic_formula_score": false,
+    "question_keywords": [
+      "mesh",
+      "kvl",
+      "loop current",
+      "i1",
+      "i2",
+      "50v",
+      "current equation"
+    ],
+    "handwritten_calibration": {
+      "enabled": true,
+      "ocr_backends": ["google_vision", "azure"],
+      "engines": ["LLM"],
+      "intercept": 3.836,
+      "raw_score_weight": 0.745,
+      "text_similarity_weight": 0.334,
+      "diagram_similarity_weight": -1.394,
+      "formula_similarity_weight": 0.0,
+      "min_score": 0.0,
+      "max_score": 10.0
+    }
   },
   "4": {
     "max_marks": 10,
@@ -37,7 +105,32 @@
     "penalize_missing_diagram": false,
     "penalize_missing_formula": false,
     "llm_full_question_score": true,
-    "use_symbolic_formula_score": false
+    "use_symbolic_formula_score": false,
+    "question_keywords": [
+      "8051",
+      "microprocessor",
+      "microcontroller",
+      "pin diagram",
+      "port",
+      "vcc",
+      "gnd",
+      "rst",
+      "xtal",
+      "ale",
+      "psen"
+    ],
+    "handwritten_calibration": {
+      "enabled": true,
+      "ocr_backends": ["google_vision", "azure"],
+      "engines": ["LLM"],
+      "intercept": 3.395,
+      "raw_score_weight": 1.148,
+      "text_similarity_weight": -2.48,
+      "diagram_similarity_weight": 2.238,
+      "formula_similarity_weight": 0.0,
+      "min_score": 0.0,
+      "max_score": 10.0
+    }
   },
   "5": {
     "max_marks": 10,
@@ -47,7 +140,30 @@
     "penalize_missing_diagram": false,
     "penalize_missing_formula": false,
     "llm_full_question_score": true,
-    "use_symbolic_formula_score": false
+    "use_symbolic_formula_score": false,
+    "question_keywords": [
+      "full adder",
+      "full add",
+      "logic deagram",
+      "sum",
+      "carry",
+      "cin",
+      "cout",
+      "truth table",
+      "logic diagram"
+    ],
+    "handwritten_calibration": {
+      "enabled": true,
+      "ocr_backends": ["google_vision", "azure"],
+      "engines": ["LLM"],
+      "intercept": 7.698,
+      "raw_score_weight": 0.055,
+      "text_similarity_weight": -1.248,
+      "diagram_similarity_weight": 1.538,
+      "formula_similarity_weight": 0.0,
+      "min_score": 0.0,
+      "max_score": 10.0
+    }
   },
   "6": {
     "max_marks": 10,
@@ -57,7 +173,28 @@
     "penalize_missing_diagram": false,
     "penalize_missing_formula": false,
     "llm_full_question_score": true,
-    "use_symbolic_formula_score": false
+    "use_symbolic_formula_score": false,
+    "question_keywords": [
+      "k map",
+      "k-map",
+      "kmap",
+      "boolean",
+      "minterm",
+      "simplify",
+      "abcd"
+    ],
+    "handwritten_calibration": {
+      "enabled": true,
+      "ocr_backends": ["google_vision", "azure"],
+      "engines": ["LLM"],
+      "intercept": 4.869,
+      "raw_score_weight": 0.353,
+      "text_similarity_weight": 0.035,
+      "diagram_similarity_weight": 0.0,
+      "formula_similarity_weight": 0.0,
+      "min_score": 0.0,
+      "max_score": 10.0
+    }
   },
   "7": {
     "max_marks": 10,
@@ -67,7 +204,28 @@
     "penalize_missing_diagram": false,
     "penalize_missing_formula": false,
     "llm_full_question_score": true,
-    "use_symbolic_formula_score": false
+    "use_symbolic_formula_score": false,
+    "question_keywords": [
+      "full wave rectifier",
+      "rectifier",
+      "diode",
+      "transformer",
+      "waveform",
+      "pulsating",
+      "half cycle"
+    ],
+    "handwritten_calibration": {
+      "enabled": true,
+      "ocr_backends": ["google_vision", "azure"],
+      "engines": ["LLM"],
+      "intercept": 0.76,
+      "raw_score_weight": 1.76,
+      "text_similarity_weight": 5.055,
+      "diagram_similarity_weight": -5.787,
+      "formula_similarity_weight": 0.0,
+      "min_score": 0.0,
+      "max_score": 10.0
+    }
   },
   "8": {
     "max_marks": 10,
@@ -77,7 +235,27 @@
     "penalize_missing_diagram": false,
     "penalize_missing_formula": false,
     "llm_full_question_score": true,
-    "use_symbolic_formula_score": false
+    "use_symbolic_formula_score": false,
+    "question_keywords": [
+      "cmos",
+      "pmos",
+      "nmos",
+      "pull up",
+      "pull down",
+      "mos"
+    ],
+    "handwritten_calibration": {
+      "enabled": true,
+      "ocr_backends": ["google_vision", "azure"],
+      "engines": ["LLM"],
+      "intercept": 3.297,
+      "raw_score_weight": 2.605,
+      "text_similarity_weight": 12.717,
+      "diagram_similarity_weight": -14.965,
+      "formula_similarity_weight": 0.0,
+      "min_score": 0.0,
+      "max_score": 10.0
+    }
   },
   "9": {
     "max_marks": 10,
@@ -87,7 +265,27 @@
     "penalize_missing_diagram": false,
     "penalize_missing_formula": false,
     "llm_full_question_score": true,
-    "use_symbolic_formula_score": false
+    "use_symbolic_formula_score": false,
+    "question_keywords": [
+      "am modulation",
+      "amplitude modulation",
+      "carrier",
+      "message signal",
+      "modulation index",
+      "modulated signal"
+    ],
+    "handwritten_calibration": {
+      "enabled": true,
+      "ocr_backends": ["google_vision", "azure"],
+      "engines": ["LLM"],
+      "intercept": 1.26,
+      "raw_score_weight": 1.101,
+      "text_similarity_weight": -0.959,
+      "diagram_similarity_weight": 3.319,
+      "formula_similarity_weight": 0.0,
+      "min_score": 0.0,
+      "max_score": 10.0
+    }
   },
   "10": {
     "max_marks": 10,
@@ -97,6 +295,28 @@
     "penalize_missing_diagram": false,
     "penalize_missing_formula": false,
     "llm_full_question_score": true,
-    "use_symbolic_formula_score": false
+    "use_symbolic_formula_score": false,
+    "question_keywords": [
+      "flip flop",
+      "flip-flop",
+      "sr",
+      "jk",
+      "latch",
+      "clock",
+      "truth table",
+      "application"
+    ],
+    "handwritten_calibration": {
+      "enabled": true,
+      "ocr_backends": ["google_vision", "azure"],
+      "engines": ["LLM"],
+      "intercept": 3.201,
+      "raw_score_weight": 1.063,
+      "text_similarity_weight": 0.239,
+      "diagram_similarity_weight": -0.426,
+      "formula_similarity_weight": 0.0,
+      "min_score": 0.0,
+      "max_score": 10.0
+    }
   }
 }
