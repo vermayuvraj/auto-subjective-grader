@@ -8,6 +8,7 @@ Step 2.5: Formula Extraction + OCR
 """
 
 import json
+import importlib
 import os
 import re
 import warnings
@@ -29,11 +30,6 @@ warnings.filterwarnings(
 
 from pdf2image import convert_from_path
 from PIL import Image
-
-try:
-    from pix2tex.cli import LatexOCR
-except ImportError:  # optional until formula mode is used
-    LatexOCR = None
 
 
 @dataclass
@@ -66,16 +62,26 @@ def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def _require_pix2tex() -> None:
-    if LatexOCR is None:
+def _load_pix2tex_class():
+    try:
+        cli_module = importlib.import_module("pix2tex.cli")
+        return getattr(cli_module, "LatexOCR", None)
+    except ImportError:
+        return None
+
+
+def _require_pix2tex():
+    latex_ocr_class = _load_pix2tex_class()
+    if latex_ocr_class is None:
         raise RuntimeError(
             "pix2tex is not installed. Install it before running formula-aware evaluation."
         )
+    return latex_ocr_class
 
 
 def build_formula_reader():
-    _require_pix2tex()
-    return LatexOCR()
+    latex_ocr_class = _require_pix2tex()
+    return latex_ocr_class()
 
 
 def cleanup_formula_outputs(pdf_path: str, config: FormulaConfig) -> None:
